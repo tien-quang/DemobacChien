@@ -48,14 +48,39 @@ setInterval(() => { const now = Date.now(); for (const [h, s] of sessions) if (n
 
 function parseCookies(header) {
   const out = {};
-  String(header || '').split(';').forEach((p) => { const i = p.indexOf('='); if (i > 0) out[p.slice(0, i).trim()] = decodeURIComponent(p.slice(i + 1).trim()); });
+  String(header || '').split(';').forEach((p) => {
+    const i = p.indexOf('=');
+    if (i <= 0) return;
+    const val = p.slice(i + 1).trim();
+    // cookie của trang khác / cookie hỏng (ví dụ %E0%A4%A) không được làm sập máy chủ
+    try { out[p.slice(0, i).trim()] = decodeURIComponent(val); } catch { out[p.slice(0, i).trim()] = val; }
+  });
   return out;
 }
-const sessionCookieName = (slot) => /^[A-Za-z0-9_-]{16,64}$/.test(String(slot || '')) ? `sid-${slot}` : 'sid';
+
+// Mỗi tab trình duyệt có 1 "slot" riêng (client gửi header X-Session-Slot, WebSocket gửi ?slot=), cookie phiên tên sid-<slot>.
+// Nhờ vậy admin và user đăng nhập CÙNG LÚC trên cùng 1 trình duyệt mà không ghi đè phiên của nhau.
+// Slot sai định dạng hoặc không có (công cụ dòng lệnh, bản cũ) dùng cookie "sid" như trước.
+const sessionCookieName = (slot) => (/^[A-Za-z0-9_-]{16,64}$/.test(String(slot || '')) ? `sid-${slot}` : 'sid');
+const sidFrom = (req, slot) => parseCookies(req.headers.cookie)[sessionCookieName(slot)];
 const cookieFlags = (maxAge) =>
   `Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}` + (process.env.COOKIE_SECURE === '1' ? '; Secure' : '');
 const setCookie = (res, sid, slot) => res.append('Set-Cookie', `${sessionCookieName(slot)}=${encodeURIComponent(sid)}; ${cookieFlags(ABS_MS / 1000)}`);
 const clearCookie = (res, slot) => res.append('Set-Cookie', `${sessionCookieName(slot)}=; ${cookieFlags(0)}`);
+
+// Phiên còn hiệu lực không? (KHÔNG làm mới đồng hồ "rảnh" của phiên đó)
+const isLive = (sid) => {
+  const s = typeof sid === 'string' && sid.length <= 100 ? sessions.get(hashSid(sid)) : null;
+  const now = Date.now();
+  return !!s && now - s.created <= ABS_MS && now - s.last <= IDLE_MS;
+};
+// Dọn cookie của các tab cũ (phiên đã hết hạn/bị thu hồi) để header yêu cầu không phình to dần
+function sweepStaleCookies(req, res, slot) {
+  const keep = sessionCookieName(slot);
+  for (const [name, val] of Object.entries(parseCookies(req.headers.cookie))) {
+    if (name.startsWith('sid-') && name !== keep && !isLive(val)) res.append('Set-Cookie', `${name}=; ${cookieFlags(0)}`);
+  }
+}
 
 // ---------- TOTP (RFC 6238), không cần thư viện ----------
 const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -114,5 +139,5 @@ const clearFails = (key) => fails.delete(key);
 
 module.exports = {
   verifyPw, pwPolicy, createSession, getSession, stillValid, revokeById, revokeUser, listSessions, parseCookies,
-  setCookie, clearCookie, sessionCookieName, newTotpSecret, totpCheck, totpUri, hit, lockedFor, failLogin, clearFails, IDLE_MS,
+  setCookie, clearCookie, sessionCookieName, sidFrom, sweepStaleCookies, newTotpSecret, totpCheck, totpUri, hit, lockedFor, failLogin, clearFails, IDLE_MS,
 };

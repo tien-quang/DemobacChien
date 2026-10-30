@@ -132,7 +132,7 @@ function totp(secret, off = 0) {
     ok(!!sel && sel.by === 'Nhân viên 1', 'admin thấy con trỏ + nội dung user1 đang gõ dở');
     ok(!w2.msgs.some((j) => j.t === 'patch' || j.t === 'sel'), 'user2 KHÔNG nhận bất kỳ thay đổi nào của user1');
     const rAdminEdit = await rpc(wa, { t: 'edit', item: kt.id, patch: { [free]: { v: 5 } } });
-    ok(rAdminEdit.t === 'err', 'admin cũng không sửa được bài đã giao (chỉ xem)');
+    ok(rAdminEdit.t === 'ack', 'admin sửa được bài đã giao');
 
     console.log('\n[5] Nộp bài và tổng hợp về workbook lớn');
     const sub = await u1.post('/api/items/' + kt.id + '/submit');
@@ -144,7 +144,7 @@ function totp(secret, off = 0) {
     const ver = (await admin.get(`/api/items/${kt.id}/verify`)).data;
     ok(ver.state === 'ok', 'xác minh toàn vẹn bài nộp: chữ ký + mã băm khớp');
     const bd = (await admin.get(`/api/books/${payroll.id}/data`)).data;
-    ok(bd[kt.id].data.cells[free].v === 20, 'dữ liệu user1 đã nằm trong workbook lớn của admin');
+    ok(bd[kt.id].data.cells[free].v === 5, 'dữ liệu sau khi admin chỉnh sửa đã nằm trong workbook lớn');
     const exp = await admin.get(`/api/books/${payroll.id}/export`);
     ok(exp.status === 200 && Buffer.isBuffer(exp.data) && exp.data.length > 5000, 'admin xuất cả workbook lớn thành 1 file .xlsx');
     ok((await admin.post(`/api/items/${kt.id}/reopen`)).status === 200, 'admin mở lại bài');

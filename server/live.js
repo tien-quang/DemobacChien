@@ -69,9 +69,9 @@ module.exports = function attach(server) {
     const deny = (code, text) => { socket.write(`HTTP/1.1 ${code} ${text}\r\nConnection: close\r\n\r\n`); socket.destroy(); };
     if (!String(req.url).startsWith('/ws')) return deny(404, 'Not Found');
     try { if (new URL(req.headers.origin || '').host !== req.headers.host) return deny(403, 'Forbidden'); } catch { return deny(403, 'Forbidden'); }
-    const slot = new URL(req.url, 'http://localhost').searchParams.get('slot');
-    const cookies = auth.parseCookies(req.headers.cookie);
-    const session = auth.getSession(cookies[auth.sessionCookieName(slot)]);
+    let slot = null;
+    try { slot = new URL(req.url, 'http://localhost').searchParams.get('slot'); } catch { /* địa chỉ lạ: coi như không có slot */ }
+    const session = auth.getSession(auth.sidFrom(req, slot));
     const user = session && store.user(session.userId);
     if (!user) return deny(401, 'Unauthorized');
     wss.handleUpgrade(req, socket, head, (ws) => {

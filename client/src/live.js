@@ -1,5 +1,6 @@
 // Kết nối thời gian thực dùng chung. Tự kết nối lại; các chỉnh sửa chưa được server xác nhận (ack)
 // được giữ trong hàng đợi và gửi lại sau khi kết nối lại, nên mất mạng ngắn không mất dữ liệu.
+import { sessionSlot } from './api.js';
 const listeners = new Set();
 const subs = new Map();      // key -> message cần gửi lại sau mỗi lần kết nối
 const pending = new Map();   // seq -> { msg, resolve, reject, sent }
@@ -18,8 +19,7 @@ function connect() {
   wanted = true;
   if (ws && (ws.readyState === 0 || ws.readyState === 1)) return;
   setState('connecting');
-  const slot = sessionStorage.getItem('office-session-slot') || '';
-  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?slot=' + encodeURIComponent(slot));
+  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?slot=' + sessionSlot());
   ws.onopen = () => {
     retry = 0; setState('open');
     subs.forEach((m) => raw(m));

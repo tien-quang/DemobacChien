@@ -18,7 +18,7 @@ function perm(user, it) {
   const own = it.assigneeId === user.id;
   const pastDue = !!(it.deadline && Date.now() > Date.parse(it.deadline));
   const read = admin || own;
-  const edit = !FINAL.has(it.status) && !pastDue && (admin ? !it.assigneeId : own);
+  const edit = !FINAL.has(it.status) && (admin || (!pastDue && own));
   return { admin, own, read, edit, pastDue };
 }
 

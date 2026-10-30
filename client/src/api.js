@@ -1,12 +1,18 @@
-// Token phiên nằm trong cookie HttpOnly; sessionStorage chỉ giữ mã chọn cookie của tab hiện tại.
+// Token phiên nằm trong cookie HttpOnly (JavaScript không đọc được). sessionStorage chỉ giữ "slot": mã dùng để chọn
+// cookie phiên của TAB này, nên admin và user đăng nhập cùng lúc trên cùng 1 trình duyệt mà không ghi đè nhau.
 let onUnauth = () => {};
 export const setUnauthHandler = (f) => { onUnauth = f; };
-const sessionSlot = () => {
+
+let memSlot = null; // dự phòng khi trình duyệt chặn sessionStorage
+export const sessionSlot = () => {
   const key = 'office-session-slot';
-  let slot = sessionStorage.getItem(key);
+  let slot = null;
+  try { slot = sessionStorage.getItem(key); } catch { slot = memSlot; }
   if (!slot) {
-    slot = crypto.randomUUID().replaceAll('-', '');
-    sessionStorage.setItem(key, slot);
+    // getRandomValues chạy cả khi mở bằng http://IP-trong-mạng-LAN (crypto.randomUUID thì KHÔNG: cần https hoặc localhost)
+    slot = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
+    memSlot = slot;
+    try { sessionStorage.setItem(key, slot); } catch { /* dùng bản trong bộ nhớ */ }
   }
   return slot;
 };
@@ -16,8 +22,8 @@ async function request(path, method = 'GET', body, extra = {}) {
     method,
     credentials: 'same-origin',
     headers: {
-      ...(body !== undefined && !extra.raw ? { 'Content-Type': 'application/json' } : {}),
       'X-Session-Slot': sessionSlot(),
+      ...(body !== undefined && !extra.raw ? { 'Content-Type': 'application/json' } : {}),
       ...(extra.headers || {}),
     },
     body: body === undefined ? undefined : extra.raw ? body : JSON.stringify(body),

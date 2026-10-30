@@ -22,8 +22,7 @@ const app = express();
 const server = http.createServer(app);
 const live = attachLive(server);
 const { E } = core;
-const sessionSlot = (req) => req.headers['x-session-slot'];
-const sessionIdFromRequest = (req) => auth.parseCookies(req.headers.cookie)[auth.sessionCookieName(sessionSlot(req))];
+const SLOT = (req) => req.headers['x-session-slot'];
 
 app.disable('x-powered-by');
 if (process.env.TRUST_PROXY === '1') app.set('trust proxy', 1);
@@ -72,16 +71,19 @@ app.post('/api/login', (req, res) => {
     store.saveMetaSoon();
   }
   auth.clearFails(kIp); auth.clearFails(kUser);
-  auth.setCookie(res, auth.createSession(u, ip, req.headers['user-agent']), sessionSlot(req));
+  const old = auth.getSession(auth.sidFrom(req, SLOT(req)));
+  if (old) { auth.revokeById(old.id); live.closeSession(old.h); }
+  auth.setCookie(res, auth.createSession(u, ip, req.headers['user-agent']), SLOT(req));
+  auth.sweepStaleCookies(req, res, SLOT(req));
   store.audit(u.id, 'login', null, ip);
   res.json({ ok: true });
 });
 
 // ---------- mọi route /api bên dưới cần phiên hợp lệ ----------
 app.use('/api', (req, res, next) => {
-  const s = auth.getSession(sessionIdFromRequest(req));
+  const s = auth.getSession(auth.sidFrom(req, SLOT(req)));
   const u = s && store.user(s.userId);
-  if (!u) { auth.clearCookie(res, sessionSlot(req)); return res.status(401).json({ error: 'Phiên đã hết hạn, vui lòng đăng nhập lại' }); }
+  if (!u) { auth.clearCookie(res, SLOT(req)); return res.status(401).json({ error: 'Phiên đã hết hạn, vui lòng đăng nhập lại' }); }
   if (!auth.hit('api:' + s.h, 900, 60000)) return res.status(429).json({ error: 'Quá nhiều yêu cầu' });
   req.user = u; req.session = s;
   next();
@@ -90,10 +92,11 @@ const adminOnly = (req, res, next) => (core.isAdmin(req.user) ? next() : res.sta
 const A = (req, action, itemId, extra) => store.audit(req.user.id, action, itemId, ipOf(req), extra);
 
 app.post('/api/logout', (req, res) => {
-  auth.revokeById(req.session.id); live.closeSession(req.session.h); auth.clearCookie(res, sessionSlot(req));
+  auth.revokeById(req.session.id); live.closeSession(req.session.h); auth.clearCookie(res, SLOT(req));
   A(req, 'logout'); res.json({ ok: true });
 });
 app.get('/api/me', (req, res) => {
+  auth.sweepStaleCookies(req, res, SLOT(req));
   const u = req.user;
   res.json({
     id: u.id, username: u.username, name: u.name, role: u.role, tag: req.session.id.slice(0, 4),
