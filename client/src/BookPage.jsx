@@ -128,6 +128,7 @@ function Overview({ book, online, users, onOpen, reload, flash }) {
               <td className="small">{it.type === 'excel' ? (it.protectOn ? `${it.protectCount} ô được nhập` : 'Tắt') : '—'}</td>
               <td className="actions">
                 <button onClick={() => onOpen(it.id)}>Xem</button>
+                <button className="primary" onClick={() => onOpen(it.id)}>Sửa</button>
                 {['submitted', 'approved'].includes(it.status) && <button onClick={() => verify(it)}>Xác minh</button>}
                 {it.status === 'submitted' && <button className="primary" onClick={() => approve(it)}>Duyệt</button>}
                 {['submitted', 'approved'].includes(it.status) && <button onClick={() => giveBack(it)}>Trả lại</button>}
