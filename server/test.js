@@ -141,10 +141,12 @@ function totp(secret, off = 0) {
     ok(!!st, 'admin nhận trạng thái "Đã nộp" ngay lập tức');
     const r7 = await rpc(w1, { t: 'edit', item: kt.id, patch: { [free]: { v: 30 } } });
     ok(r7.t === 'err' && r7.status === 409, 'sau khi nộp không sửa được nữa (409)');
+    const rAdminSubmitted = await rpc(wa, { t: 'edit', item: kt.id, patch: { [free]: { v: 6 } } });
+    ok(rAdminSubmitted.t === 'ack', 'admin sửa được bài đã nộp');
     const ver = (await admin.get(`/api/items/${kt.id}/verify`)).data;
-    ok(ver.state === 'ok', 'xác minh toàn vẹn bài nộp: chữ ký + mã băm khớp');
+    ok(ver.state === 'tampered', 'xác minh phát hiện admin đã chỉnh sửa sau khi nộp');
     const bd = (await admin.get(`/api/books/${payroll.id}/data`)).data;
-    ok(bd[kt.id].data.cells[free].v === 5, 'dữ liệu sau khi admin chỉnh sửa đã nằm trong workbook lớn');
+    ok(bd[kt.id].data.cells[free].v === 6, 'dữ liệu sau khi admin chỉnh sửa đã nằm trong workbook lớn');
     const exp = await admin.get(`/api/books/${payroll.id}/export`);
     ok(exp.status === 200 && Buffer.isBuffer(exp.data) && exp.data.length > 5000, 'admin xuất cả workbook lớn thành 1 file .xlsx');
     ok((await admin.post(`/api/items/${kt.id}/reopen`)).status === 200, 'admin mở lại bài');

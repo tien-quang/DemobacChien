@@ -44,7 +44,7 @@ function userView(it, user) {
 function adminView(it) {
   const a = it.assigneeId ? store.user(it.assigneeId) : null;
   return {
-    id: it.id, bookId: it.bookId, name: it.name, type: it.type, status: it.status,
+    id: it.id, bookId: it.bookId, name: it.name, type: it.type, status: it.status, editable: true,
     assigneeId: it.assigneeId, assigneeName: a ? a.name : null,
     submittedAt: it.submittedAt, approvedAt: it.approvedAt, returnNote: it.returnNote, submitHash: it.submitHash, updatedAt: it.updatedAt, version: it.version,
     deadline: it.deadline, protectOn: it.protect.on, protectCount: Object.keys(it.protect.cells).length,

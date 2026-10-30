@@ -214,7 +214,7 @@ export default function BookPage({ me, id }) {
 
   const it = book.items.find((i) => i.id === active);
   const d = it && datas[it.id];
-  const editable = !!it;
+  const editable = !!it && it.editable !== false;
 
   const sendEdit = (msg) => live.edit({ item: it.id, ...msg }).catch((e) => { flash(e.message); load(); });
   const onSheet = (nd) => {
