@@ -214,7 +214,7 @@ export default function BookPage({ me, id }) {
 
   const it = book.items.find((i) => i.id === active);
   const d = it && datas[it.id];
-  const editable = !!it && !['submitted', 'approved'].includes(it.status);
+  const editable = !!it;
 
   const sendEdit = (msg) => live.edit({ item: it.id, ...msg }).catch((e) => { flash(e.message); load(); });
   const onSheet = (nd) => {
@@ -228,7 +228,7 @@ export default function BookPage({ me, id }) {
     catch (e) { flash(e.message); }
   };
 
-  const notice = !it ? '' : it.status === 'approved' ? `Đã duyệt (bài của ${it.assigneeName}): chỉ xem` : it.status === 'submitted' ? `Đã nộp bởi ${it.assigneeName}, chờ duyệt: chỉ xem`
+  const notice = !it ? '' : it.status === 'approved' ? `Đã duyệt (bài của ${it.assigneeName}): quản trị viên vẫn có thể chỉnh sửa` : it.status === 'submitted' ? `Đã nộp bởi ${it.assigneeName}, quản trị viên vẫn có thể chỉnh sửa`
     : it.assigneeId ? `Bài của ${it.assigneeName}${online.has(it.id) ? ' (đang trực tuyến)' : ''}: quản trị viên có thể chỉnh sửa`
       : 'Chưa giao: bạn có thể chỉnh sửa';
 

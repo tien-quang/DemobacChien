@@ -67,7 +67,10 @@ export default function ItemPage({ me, id }) {
   if (!item || !data) return <div className="wrap muted">Đang tải…</div>;
 
   const wm = `${me.name} · ${me.username} · #${me.tag} · ${new Date().toLocaleDateString('vi-VN')}`;
-  const notice = item.status === 'approved' ? 'Đã được duyệt: chỉ xem' : item.status === 'submitted' ? 'Đã nộp, chờ duyệt: chỉ xem' : item.pastDue ? 'Quá hạn nộp: chỉ xem' : !item.editable ? 'Chỉ xem' : '';
+  const admin = me.role === 'admin';
+  const notice = admin
+    ? (item.status === 'approved' ? 'Đã duyệt: quản trị viên vẫn có thể chỉnh sửa' : item.status === 'submitted' ? 'Đã nộp: quản trị viên vẫn có thể chỉnh sửa' : 'Quản trị viên có thể chỉnh sửa')
+    : item.status === 'approved' ? 'Đã được duyệt: chỉ xem' : item.status === 'submitted' ? 'Đã nộp, chờ duyệt: chỉ xem' : item.pastDue ? 'Quá hạn nộp: chỉ xem' : !item.editable ? 'Chỉ xem' : '';
   return (
     <div className="docpage">
       <div className={'titlebar ' + item.type}>
@@ -78,7 +81,7 @@ export default function ItemPage({ me, id }) {
         <span className="grow" />
         {item.editable && <span className="savemsg">{pending ? 'Đang gửi…' : 'Đã lưu trên máy chủ'}</span>}
         <ConnDot />
-        {item.editable && <button className="submit" onClick={submit}>Nộp bài</button>}
+        {item.editable && !admin && <button className="submit" onClick={submit}>Nộp bài</button>}
       </div>
       {item.returnNote && item.editable && <div className="return-note"><b>Quản trị viên trả lại bài:</b> {item.returnNote}</div>}
       <div className="docbody">

@@ -18,7 +18,7 @@ function perm(user, it) {
   const own = it.assigneeId === user.id;
   const pastDue = !!(it.deadline && Date.now() > Date.parse(it.deadline));
   const read = admin || own;
-  const edit = !FINAL.has(it.status) && (admin || (!pastDue && own));
+  const edit = admin || (!FINAL.has(it.status) && !pastDue && own);
   return { admin, own, read, edit, pastDue };
 }
 
@@ -71,7 +71,7 @@ function cleanPatch(patch) {
 function applyEdit(user, id, msg, ip) {
   const it = getReadable(user, id, ip);
   const p = perm(user, it);
-  if (FINAL.has(it.status)) throw E(409, 'Đã nộp, không thể sửa');
+  if (FINAL.has(it.status) && !p.admin) throw E(409, 'Đã nộp, không thể sửa');
   if (!p.edit) throw E(403, p.pastDue ? 'Đã quá hạn nộp' : 'Bạn chỉ được xem phần này');
   const out = { itemId: it.id, bookId: it.bookId, by: user.id };
   let op;
