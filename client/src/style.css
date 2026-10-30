@@ -1,0 +1,250 @@
+:root {
+  --bg: #f3f2f1;
+  --panel: #ffffff;
+  --ink: #201f1e;
+  --muted: #605e5c;
+  --line: #e1dfdd;
+  --head: #f3f2f1;
+  --excel: #1d6f42;
+  --excel-soft: #e3f1ea;
+  --word: #2b579a;
+  --bad: #a4262c;
+  --warn: #8a6100;
+}
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 14px/1.45 "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+}
+h1 { font-size: 20px; margin: 24px 0 12px; font-weight: 600; }
+h2 { font-size: 16px; margin: 0 0 8px; font-weight: 600; }
+a { color: inherit; }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+.err { color: var(--bad); margin: 8px 0 0; }
+.grow { flex: 1; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+button, select, input { font: inherit; color: inherit; }
+button {
+  padding: 5px 12px; border: 1px solid #c8c6c4; background: #fff; border-radius: 3px; cursor: pointer;
+}
+button:hover:not(:disabled) { background: #f3f2f1; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.primary { background: var(--excel); border-color: var(--excel); color: #fff; }
+button.primary:hover:not(:disabled) { background: #185c37; }
+button.danger { color: var(--bad); }
+button.link { border: 0; background: none; color: var(--word); text-decoration: underline; padding: 0 0 0 8px; }
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid #0f6cbd; outline-offset: 1px; }
+input, select { padding: 5px 8px; border: 1px solid #c8c6c4; border-radius: 3px; background: #fff; }
+
+/* ---------- đăng nhập, khung chung ---------- */
+.login { min-height: 100%; display: grid; place-items: center; padding: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 20px; }
+.login .card { width: 360px; display: grid; gap: 10px; }
+.login h1 { margin: 0; }
+.topbar {
+  display: flex; align-items: center; gap: 16px; padding: 8px 20px; background: #fff; border-bottom: 1px solid var(--line);
+}
+.brand { font-weight: 700; text-decoration: none; font-size: 16px; }
+.topbar nav { display: flex; gap: 14px; }
+.topbar nav a { text-decoration: none; color: var(--muted); }
+.topbar nav a:hover { color: var(--ink); }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px 40px; }
+
+/* ---------- trang chủ ---------- */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.tile { background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--muted); border-radius: 4px; padding: 14px 16px; }
+.tile.excel { border-left-color: var(--excel); }
+.tile.word { border-left-color: var(--word); }
+.tile.off { opacity: .6; }
+.tile p { margin: 0 0 12px; color: var(--muted); }
+.tile.word button.primary { background: var(--word); border-color: var(--word); }
+.doccard { display: flex; gap: 12px; align-items: center; background: #fff; border: 1px solid var(--line); border-radius: 4px; padding: 12px 14px; margin-bottom: 8px; }
+.badge { width: 36px; height: 36px; display: grid; place-items: center; color: #fff; font-weight: 700; border-radius: 3px; flex: none; }
+.badge.excel { background: var(--excel); }
+.badge.word { background: var(--word); }
+.doctitle { font-weight: 600; text-decoration: none; }
+.doctitle:hover { text-decoration: underline; }
+.progress { height: 5px; background: var(--line); border-radius: 3px; margin-top: 6px; max-width: 320px; overflow: hidden; }
+.progress span { display: block; height: 100%; background: var(--excel); }
+
+table.list { width: 100%; border-collapse: collapse; }
+.list th, .list td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.list th { color: var(--muted); font-weight: 600; font-size: 12.5px; }
+.list tr.bad td { color: var(--bad); }
+.tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; background: #edebe9; }
+.tag.assigned { background: #deecf9; color: #0b5a9d; }
+.tag.in_progress { background: #fff4ce; color: var(--warn); }
+.tag.submitted { background: var(--excel-soft); color: var(--excel); }
+
+/* ---------- trang tài liệu ---------- */
+.docpage { height: 100vh; display: flex; flex-direction: column; background: #fff; }
+.titlebar { display: flex; align-items: center; gap: 10px; padding: 7px 14px; color: #fff; }
+.titlebar.excel { background: var(--excel); }
+.titlebar.word { background: var(--word); }
+.doctitle-bar { font-weight: 600; font-size: 15px; }
+.savemsg { font-size: 12.5px; opacity: .85; }
+.titlebar button { background: transparent; color: #fff; border-color: rgba(255,255,255,.55); }
+.titlebar button:hover:not(:disabled) { background: rgba(255,255,255,.16); }
+.titlebar button.submit { background: #fff; color: var(--excel); border-color: #fff; font-weight: 600; }
+.titlebar.word button.submit { color: var(--word); }
+.docbody { flex: 1; min-height: 0; position: relative; display: flex; }
+.sheet, .word { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+.ribbon {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 10px;
+  background: #f7f6f5; border-bottom: 1px solid var(--line);
+}
+.ribbon button { padding: 3px 9px; }
+.ribbon button.on { background: var(--excel-soft); border-color: var(--excel); }
+.ribbon .sep { width: 1px; height: 20px; background: #c8c6c4; margin: 0 4px; }
+.ribbon .color { display: inline-flex; align-items: center; gap: 4px; padding: 0 4px; }
+.ribbon input[type=color] { width: 26px; height: 24px; padding: 0; border: 1px solid #c8c6c4; background: #fff; }
+.ribbon .notice { margin-left: auto; color: var(--warn); font-size: 12.5px; background: #fff4ce; padding: 2px 8px; border-radius: 3px; }
+
+.fbar { display: flex; align-items: center; border-bottom: 1px solid var(--line); background: #fff; }
+.namebox { width: 96px; padding: 4px 10px; border-right: 1px solid var(--line); font-weight: 600; text-align: center; }
+.fx { padding: 0 8px; color: var(--muted); font-style: italic; }
+.fbar input { flex: 1; border: 0; border-radius: 0; padding: 5px 6px; }
+
+/* ---------- lưới ---------- */
+.gridwrap { position: relative; flex: 1; min-height: 0; outline: none; background: #fff; }
+.gscroll { position: absolute; inset: 0; overflow: auto; }
+.gbody { position: relative; cursor: cell; }
+.shead { position: sticky; top: 0; z-index: 6; background: var(--head); }
+.corner { position: sticky; left: 0; width: 48px; height: 100%; background: var(--head); border-right: 1px solid #c8c6c4; border-bottom: 1px solid #c8c6c4; z-index: 7; }
+.ch {
+  position: absolute; top: 0; height: 100%; text-align: center; line-height: 25px; color: var(--muted);
+  border-right: 1px solid #c8c6c4; border-bottom: 1px solid #c8c6c4; background: var(--head); user-select: none;
+}
+.ch.on { background: #d2e6db; color: var(--excel); font-weight: 600; }
+.srow { position: absolute; left: 0; }
+.rn {
+  position: sticky; left: 0; z-index: 4; width: 48px; height: 100%; text-align: center; line-height: 23px;
+  background: var(--head); color: var(--muted); border-right: 1px solid #c8c6c4; border-bottom: 1px solid var(--line);
+  user-select: none; font-size: 12.5px;
+}
+.rn.on { background: #d2e6db; color: var(--excel); font-weight: 600; }
+.cell {
+  position: absolute; top: 0; height: 100%; padding: 0 6px; line-height: 23px; white-space: nowrap; overflow: hidden;
+  border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); user-select: none; background: #fff;
+}
+.cell.err { color: var(--bad); }
+.selrange { position: absolute; background: rgba(29,111,66,.10); border: 1px solid var(--excel); pointer-events: none; z-index: 3; }
+.activecell { position: absolute; border: 2px solid var(--excel); pointer-events: none; z-index: 3; }
+.celledit {
+  position: absolute; z-index: 5; border: 2px solid var(--excel); border-radius: 0; padding: 0 5px; background: #fff;
+  min-width: 80px; outline: none;
+}
+.watermark { position: absolute; inset: 0; pointer-events: none; z-index: 8; background-repeat: repeat; }
+.statusbar {
+  display: flex; justify-content: space-between; padding: 2px 12px; background: var(--head);
+  border-top: 1px solid var(--line); font-size: 12px; color: var(--muted);
+}
+
+/* ---------- Word ---------- */
+.pagearea { flex: 1; min-height: 0; overflow: auto; background: #e1dfdd; padding: 24px 12px; }
+.pagewrap { position: relative; width: 794px; max-width: 100%; margin: 0 auto; background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,.25); }
+.page {
+  min-height: 1050px; padding: 64px 72px; outline: none; font: 16px/1.6 Calibri, "Segoe UI", Arial, sans-serif;
+  word-wrap: break-word;
+}
+.page h1 { font-size: 26px; margin: 0 0 12px; }
+.page h2 { font-size: 20px; margin: 18px 0 8px; }
+.page h3 { font-size: 17px; margin: 14px 0 6px; }
+.page table { border-collapse: collapse; max-width: 100%; }
+.page td, .page th { border: 1px solid #999; padding: 4px 6px; }
+.page img { max-width: 100%; }
+
+/* ---------- thẻ sheet ---------- */
+.tabsbar { display: flex; align-items: flex-end; gap: 2px; padding: 0 10px; background: var(--head); border-top: 1px solid #c8c6c4; overflow-x: auto; }
+.stab {
+  flex: none; display: inline-flex; align-items: center; gap: 7px; padding: 7px 14px 5px; border: 0; border-radius: 0;
+  background: transparent; border-bottom: 3px solid transparent; white-space: nowrap;
+}
+.stab:hover:not(:disabled) { background: #e8e6e4; }
+.stab.on { background: #fff; border-bottom-color: var(--excel); font-weight: 600; }
+.stab small { color: var(--muted); font-weight: 400; }
+.stab.locked {
+  color: #8a8886; cursor: not-allowed;
+  background: repeating-linear-gradient(135deg, #ebe9e7 0 6px, #f3f2f1 6px 12px);
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #a19f9d; display: inline-block; }
+.dot.assigned { background: #2b88d8; }
+.dot.in_progress { background: #e0a800; }
+.dot.submitted { background: var(--excel); }
+.tabsinfo { padding: 6px 4px; }
+
+/* ---------- panel phân quyền ---------- */
+.drawer {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 460px; max-width: 100%; z-index: 20;
+  background: #fff; border-left: 1px solid #c8c6c4; box-shadow: -6px 0 18px rgba(0,0,0,.12); padding: 14px 16px; overflow: auto;
+}
+.drawer-head { display: flex; justify-content: space-between; align-items: center; }
+.drawer-foot { position: sticky; bottom: 0; background: #fff; padding: 12px 0 2px; margin-top: 8px; border-top: 1px solid var(--line); }
+.drawer select { max-width: 190px; }
+
+.toast {
+  position: fixed; left: 50%; bottom: 56px; transform: translateX(-50%); background: #323130; color: #fff;
+  padding: 9px 16px; border-radius: 4px; z-index: 50; max-width: 90vw;
+}
+
+@media print { body * { display: none !important; } body::after { content: "Không được phép in tài liệu này."; display: block; padding: 24px; } }
+
+/* ================= v3: workbook lớn/nhỏ, thời gian thực, bảo mật ================= */
+.banner { background: #fff4ce; border: 1px solid #e8c766; color: #6b4d00; padding: 8px 12px; border-radius: 3px; }
+.warnlink { color: var(--warn); font-weight: 600; text-decoration: none; background: #fff4ce; padding: 2px 8px; border-radius: 3px; }
+.ok-text { color: var(--excel); }
+.late { color: var(--bad); font-weight: 600; }
+.late-w { color: #ffd2d2; font-weight: 700; }
+.secret { font-size: 18px; letter-spacing: 2px; background: #f3f2f1; padding: 4px 10px; border-radius: 3px; user-select: all; }
+.card + .card, form.card + .card { margin-top: 12px; }
+.card h2 { margin-bottom: 10px; }
+code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; word-break: break-all; }
+
+/* thời gian thực */
+.pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #2fb344; vertical-align: middle; animation: pulse 1.4s infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(47,179,68,.6); } 70% { box-shadow: 0 0 0 8px rgba(47,179,68,0); } 100% { box-shadow: 0 0 0 0 rgba(47,179,68,0); } }
+.live-chip { color: #1f8a37; font-size: 12.5px; font-weight: 600; }
+.conn { font-size: 12px; padding: 1px 8px; border-radius: 10px; background: rgba(255,255,255,.2); color: #fff; }
+.conn.open::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #7dff9b; margin-right: 5px; }
+.conn.closed { background: #a4262c; }
+.dot.live { animation: pulse 1.4s infinite; }
+.cell.flash { animation: flash 1.5s ease-out; }
+@keyframes flash { 0% { background: #ffd54a; box-shadow: inset 0 0 0 2px #f0a500; } 100% { box-shadow: inset 0 0 0 0 transparent; } }
+.remote { position: absolute; border: 2px solid #e8590c; z-index: 4; pointer-events: none; }
+.rlabel { position: absolute; left: -2px; bottom: 100%; margin-bottom: 1px; background: #e8590c; color: #fff; font-size: 12px; padding: 1px 7px; white-space: nowrap; border-radius: 3px 3px 3px 0; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+.protect-toggle { display: inline-flex; align-items: center; gap: 5px; padding: 0 4px; }
+
+/* tổng quan workbook lớn */
+.overview { flex: 1; min-width: 0; overflow: auto; padding: 14px 18px 30px; }
+.stats { display: flex; gap: 10px; flex-wrap: wrap; }
+.stats > div { background: #fff; border: 1px solid var(--line); border-radius: 4px; padding: 8px 16px; min-width: 110px; }
+.stats b { display: block; font-size: 22px; line-height: 1.2; }
+.stats span { color: var(--muted); font-size: 12.5px; }
+.live-num { display: inline-flex; align-items: center; gap: 6px; }
+.actions { white-space: nowrap; }
+.actions button { padding: 2px 8px; font-size: 12.5px; margin-right: 3px; }
+.linklike { text-decoration: none; font-weight: 600; }
+.linklike:hover { text-decoration: underline; }
+.mini { display: inline-grid; place-items: center; width: 18px; height: 18px; font-size: 11px; font-weight: 700; color: #fff; border-radius: 2px; }
+.mini.excel { background: var(--excel); } .mini.word { background: var(--word); }
+.overview input[type=datetime-local] { padding: 3px 6px; font-size: 12.5px; }
+.overview select { max-width: 180px; }
+.tag.light { background: rgba(255,255,255,.22); color: #fff; }
+.modal-back { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 60; display: grid; place-items: center; padding: 16px; }
+.modal { background: #fff; border-radius: 6px; padding: 18px; width: 560px; max-width: 100%; max-height: 80vh; overflow: auto; }
+.tabsbar .stab { max-width: 240px; }
+
+/* tổng hợp workbook lớn */
+.job-chip { background: #deecf9; color: #0b5a9d; padding: 2px 10px; border-radius: 10px; font-size: 12.5px; font-weight: 600; }
+.diffrow { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.diffrow code { background: #f3f2f1; padding: 0 4px; border-radius: 2px; }
+
+/* workflow duyệt / trả lại */
+.tag.approved { background: #1d6f42; color: #fff; }
+.dot.approved { background: #0b4f2c; box-shadow: 0 0 0 2px #bfe6cf; }
+.return-note { background: #fde7e9; border-bottom: 1px solid #f1b8bd; color: #7a1a22; padding: 8px 16px; }
+.tag.light.approved { background: rgba(255,255,255,.9); color: #1d6f42; }

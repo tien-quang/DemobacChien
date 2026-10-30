@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: demobacchien
+    runtime: node
+    plan: free
+    buildCommand: npm run setup && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 22.13.0
+      - key: DATA_KEY
+        sync: false
+      - key: COOKIE_SECURE
+        value: "1"

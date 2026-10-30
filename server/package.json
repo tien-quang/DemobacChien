@@ -1,0 +1,20 @@
+{
+  "name": "office-server",
+  "version": "4.0.0",
+  "main": "index.js",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning index.js",
+    "sample": "node --disable-warning=ExperimentalWarning make-sample-file.js",
+    "rotate-key": "node --disable-warning=ExperimentalWarning rotate-key.js",
+    "test": "node --disable-warning=ExperimentalWarning test.js"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "express": "^4.19.2",
+    "fast-formula-parser": "^1.0.19",
+    "html-to-docx": "^1.8.0",
+    "mammoth": "^1.8.0",
+    "ws": "^8.18.0"
+  }
+}

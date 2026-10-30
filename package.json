@@ -1,0 +1,17 @@
+{
+  "name": "office-noi-bo",
+  "version": "3.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "setup": "npm --prefix server install && npm --prefix client install",
+    "build": "npm --prefix client run build",
+    "start": "npm --prefix server start",
+    "test": "npm --prefix server test",
+    "sample": "npm --prefix server run sample",
+    "dev:server": "npm --prefix server start",
+    "dev:client": "npm --prefix client run dev"
+  }
+}
