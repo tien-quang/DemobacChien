@@ -20,3 +20,5 @@ services:
         value: https://demobacchien-1.onrender.com
       - key: ONLYOFFICE_JWT_SECRET
         sync: false
+      - key: ONLYOFFICE_JWT_HEADER
+        value: AuthorizationJWT

@@ -27,6 +27,7 @@ const CFG = {
   internal: trim(process.env.ONLYOFFICE_INTERNAL_URL) || trim(process.env.ONLYOFFICE_URL),
   appUrl: trim(process.env.ONLYOFFICE_APP_URL),
   secret: process.env.ONLYOFFICE_JWT_SECRET || '',
+  jwtHeader: process.env.ONLYOFFICE_JWT_HEADER || 'Authorization',
 };
 const enabled = () => !!(CFG.url && CFG.appUrl && CFG.secret);
 
@@ -59,6 +60,11 @@ function jwtVerify(token) {
     if (want.length !== got.length || !crypto.timingSafeEqual(want, got)) return null;
     return JSON.parse(Buffer.from(parts[1], 'base64url').toString());
   } catch { return null; }
+}
+function jwtFromRequest(req) {
+  const configured = req.headers[CFG.jwtHeader.toLowerCase()];
+  const authorization = req.headers.authorization;
+  return String(configured || authorization || req.body?.token || '').replace(/^Bearer\s+/i, '');
 }
 
 // ---------- liên kết ký sẵn cho Document Server (không có cookie phiên) ----------
@@ -169,7 +175,7 @@ async function flush(it) {
       const payload = { c: 'forcesave', key };
       const res = await fetch(`${CFG.internal}/command`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + jwtSign(payload) },
+        headers: { 'Content-Type': 'application/json', [CFG.jwtHeader]: 'Bearer ' + jwtSign(payload) },
         body: JSON.stringify({ ...payload, token: jwtSign(payload) }),
         signal: AbortSignal.timeout(8000),
       });
@@ -244,7 +250,7 @@ function mount(app) {
       if (!user) return res.status(403).json({ error: 1 });
 
       // Xác thực JWT của Document Server (header Authorization hoặc body.token)
-      const raw = (req.headers.authorization || '').replace(/^Bearer\s+/i, '') || req.body?.token;
+      const raw = jwtFromRequest(req);
       const claims = jwtVerify(raw);
       if (!claims) return res.status(403).json({ error: 1 });
       const body = claims.payload && typeof claims.payload === 'object' ? claims.payload : claims;

@@ -72,7 +72,8 @@ Render không tự chạy `docker-compose.yml`. Nếu dùng Document Server publ
 `ONLYOFFICE_URL`, `ONLYOFFICE_INTERNAL_URL`, `ONLYOFFICE_APP_URL` và
 `ONLYOFFICE_JWT_SECRET` trong Environment của service. `render.yaml` đã điền sẵn URL
 Document Server và URL ứng dụng; chỉ cần nhập `ONLYOFFICE_JWT_SECRET`, phải trùng với
-JWT secret trên Document Server.
+JWT secret trên Document Server. Nếu Document Server dùng tiêu đề JWT khác `Authorization`,
+đặt thêm `ONLYOFFICE_JWT_HEADER` tương ứng; Docs Connect thường dùng `AuthorizationJWT`.
 
 ## Mô hình lưu trữ và bảo mật
 
