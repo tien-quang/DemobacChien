@@ -2,12 +2,15 @@
   "name": "office-server",
   "version": "4.0.0",
   "main": "index.js",
-  "engines": { "node": ">=22.13" },
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning index.js",
     "sample": "node --disable-warning=ExperimentalWarning make-sample-file.js",
     "rotate-key": "node --disable-warning=ExperimentalWarning rotate-key.js",
-    "test": "node --disable-warning=ExperimentalWarning test.js"
+    "test": "node --disable-warning=ExperimentalWarning test.js",
+    "test:oo": "node --disable-warning=ExperimentalWarning test-onlyoffice.js"
   },
   "dependencies": {
     "exceljs": "^4.4.0",

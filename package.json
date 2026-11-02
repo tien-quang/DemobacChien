@@ -10,6 +10,8 @@
     "build": "npm install --prefix server && npm install --prefix client && npm --prefix client run build",
     "start": "npm --prefix server start",
     "test": "npm --prefix server test",
+    "test:oo": "npm --prefix server run test:oo",
+    "oo:up": "docker compose up -d",
     "sample": "npm --prefix server run sample",
     "dev:server": "npm --prefix server start",
     "dev:client": "npm --prefix client run dev"

@@ -4,7 +4,7 @@ import { live } from './live.js';
 import { diffGrid, applyPatch } from './diff.js';
 import { go, fmt, useLive, useToast, ConnDot, Modal, STATUS, deadlineText } from './util.jsx';
 import Spreadsheet from './Spreadsheet.jsx';
-import WordEditor from './WordEditor.jsx';
+import WordPane, { OfficePane, useOnlyOffice } from './OnlyOfficeEditor.jsx';
 import Consolidation from './Consolidation.jsx';
 
 const toLocalInput = (iso) => {
@@ -151,6 +151,8 @@ function Overview({ book, online, users, onOpen, reload, flash }) {
 
 /* ================= Trang workbook lớn (admin) ================= */
 export default function BookPage({ me, id }) {
+  const ooOn = useOnlyOffice();
+  const [classicGrid, setClassicGrid] = useState(false);
   const [book, setBook] = useState(null);
   const [datas, setDatas] = useState({});
   const [online, setOnline] = useState(new Set());
@@ -250,14 +252,27 @@ export default function BookPage({ me, id }) {
         ) : active === 'consol' ? (
           <Consolidation bookId={book.id} flash={flash} />
         ) : !it || !d ? <p className="wrap muted">Đang tải…</p> : it.type === 'excel' ? (
-          <Spreadsheet
-            key={it.id} sheetName={it.name} data={d.data} others={others} editable={editable} restricted={false}
-            protect={d.protect} remote={online.has(it.id) ? cursors[it.id] : null} flash={flashes[it.id]} notice={notice}
-            protectUI={{ on: d.protect.on, onToggle: (on) => protectCall({ on }), onAllow: (keys) => protectCall({ allow: keys }), onDeny: (keys) => protectCall({ deny: keys }) }}
-            onChange={onSheet}
-          />
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+            {ooOn === true && (
+              <div className="ribbon" style={{ flex: 'none' }}>
+                <button onClick={() => setClassicGrid((v) => !v)}>
+                  {classicGrid ? 'Quay lại ONLYOFFICE' : 'Bảng cũ (để khóa ô / theo dõi con trỏ)'}
+                </button>
+                {!classicGrid && <span className="notice">Ô bị khóa chỉ áp dụng khi lưu từ ONLYOFFICE: thay đổi vào ô khóa của user sẽ bị bỏ.</span>}
+              </div>
+            )}
+            <OfficePane
+              key={it.id} id={it.id} editable={editable} notice={notice} force={classicGrid}
+              classic={<Spreadsheet
+                key={it.id} sheetName={it.name} data={d.data} others={others} editable={editable} restricted={false}
+                protect={d.protect} remote={online.has(it.id) ? cursors[it.id] : null} flash={flashes[it.id]} notice={notice}
+                protectUI={{ on: d.protect.on, onToggle: (on) => protectCall({ on }), onAllow: (keys) => protectCall({ allow: keys }), onDeny: (keys) => protectCall({ deny: keys }) }}
+                onChange={onSheet}
+              />}
+            />
+          </div>
         ) : (
-          <WordEditor key={it.id} html={d.data.html} editable={editable} restricted={false} notice={notice} onChange={onWord} />
+          <WordPane key={it.id} id={it.id} html={d.data.html} editable={editable} restricted={false} notice={notice} onChange={onWord} />
         )}
       </div>
 

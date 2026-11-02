@@ -4,7 +4,7 @@ import { live } from './live.js';
 import { diffGrid } from './diff.js';
 import { go, useLive, useToast, deadlineText, ConnDot, STATUS } from './util.jsx';
 import Spreadsheet from './Spreadsheet.jsx';
-import WordEditor from './WordEditor.jsx';
+import WordPane, { OfficePane } from './OnlyOfficeEditor.jsx';
 
 // Workbook nhỏ của user: cửa sổ độc lập, chỉ chứa đúng 1 bảng, không có tab/sheet/workbook nào khác.
 export default function ItemPage({ me, id }) {
@@ -86,12 +86,15 @@ export default function ItemPage({ me, id }) {
       {item.returnNote && item.editable && <div className="return-note"><b>Quản trị viên trả lại bài:</b> {item.returnNote}</div>}
       <div className="docbody">
         {item.type === 'excel' ? (
-          <Spreadsheet
-            key={item.id} sheetName={item.name} data={data} others={{}} editable={item.editable} restricted
-            protect={item.protect} watermark={wm} notice={notice} onBlocked={flash} onCursor={onCursor} onChange={onSheet}
+          <OfficePane
+            key={item.id} id={item.id} editable={item.editable} notice={notice}
+            classic={<Spreadsheet
+              key={item.id} sheetName={item.name} data={data} others={{}} editable={item.editable} restricted
+              protect={item.protect} watermark={wm} notice={notice} onBlocked={flash} onCursor={onCursor} onChange={onSheet}
+            />}
           />
         ) : (
-          <WordEditor key={item.id} html={data.html} editable={item.editable} restricted watermark={wm} notice={notice} onChange={onWord} />
+          <WordPane key={item.id} id={item.id} html={data.html} editable={item.editable} restricted watermark={wm} notice={notice} onChange={onWord} />
         )}
       </div>
       {toast && <div className="toast">{toast}</div>}
