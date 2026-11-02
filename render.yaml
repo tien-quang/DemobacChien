@@ -12,3 +12,11 @@ services:
         sync: false
       - key: COOKIE_SECURE
         value: "1"
+      - key: ONLYOFFICE_URL
+        value: https://df3376cf.docs.onlyoffice.com
+      - key: ONLYOFFICE_INTERNAL_URL
+        value: https://df3376cf.docs.onlyoffice.com
+      - key: ONLYOFFICE_APP_URL
+        value: https://demobacchien-1.onrender.com
+      - key: ONLYOFFICE_JWT_SECRET
+        sync: false

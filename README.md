@@ -66,6 +66,14 @@ nên quyền sửa, hạn nộp, trạng thái đã nộp, nhật ký thao tác 
 - Production: đặt cả ứng dụng và Document Server sau HTTPS, dùng JWT secret riêng, không mở cổng 8080 ra Internet nếu không cần.
 - Kiểm thử: `npm run test:oo` (44 kiểm tra với Document Server giả, gồm Word và Excel: JWT, liên kết ký sẵn, chống SSRF, ô khóa, quyền sau khi nộp, ép lưu khi nộp).
 
+### Cấu hình trên Render
+
+Render không tự chạy `docker-compose.yml`. Nếu dùng Document Server public, đặt các biến
+`ONLYOFFICE_URL`, `ONLYOFFICE_INTERNAL_URL`, `ONLYOFFICE_APP_URL` và
+`ONLYOFFICE_JWT_SECRET` trong Environment của service. `render.yaml` đã điền sẵn URL
+Document Server và URL ứng dụng; chỉ cần nhập `ONLYOFFICE_JWT_SECRET`, phải trùng với
+JWT secret trên Document Server.
+
 ## Mô hình lưu trữ và bảo mật
 
 Giữ nguyên v4: SQLite, sheet chia khối 200 dòng mã hóa riêng, nhật ký thao tác có phục hồi sau sập máy, mã hóa theo lớp khóa + đổi khóa,
