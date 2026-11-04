@@ -64,6 +64,12 @@ export default function WordEditor({ html, editable, restricted, watermark, noti
     const row = `<tr>${cell.repeat(cols)}</tr>`;
     cmd('insertHTML', `<table style="border-collapse:collapse;width:100%"><tbody>${row.repeat(rows)}</tbody></table><p><br></p>`);
   };
+  const insertChecklist = () => cmd('insertHTML', '<div>☐ Việc cần làm</div>');
+  const insertPageBreak = () => cmd('insertHTML', '<div style="break-before:page;height:1px"></div>');
+  const findText = () => {
+    const text = window.prompt('Tìm nội dung');
+    if (text) window.find(text);
+  };
   const dis = !editable;
   const keep = (e) => { if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') e.preventDefault(); };
 
@@ -111,6 +117,11 @@ export default function WordEditor({ html, editable, restricted, watermark, noti
         <button disabled={dis} onClick={() => cmd('insertHorizontalRule')}>Đường kẻ</button>
         <button disabled={dis} onClick={() => cmd('subscript')}>X₂</button>
         <button disabled={dis} onClick={() => cmd('superscript')}>X²</button>
+        <button disabled={dis} onClick={insertChecklist}>☐ Checklist</button>
+        <button disabled={dis} onClick={insertPageBreak}>Ngắt trang</button>
+        <button disabled={dis} onClick={() => cmd('selectAll')}>Chọn tất cả</button>
+        <button onClick={findText}>Tìm</button>
+        <button onClick={() => window.print()}>In</button>
         <button disabled={dis} onClick={() => cmd('removeFormat')}>Xóa định dạng</button>
         {notice && <span className="notice">{notice}</span>}
       </div>
@@ -121,7 +132,7 @@ export default function WordEditor({ html, editable, restricted, watermark, noti
             className="page"
             contentEditable={editable}
             suppressContentEditableWarning
-            spellCheck={false}
+            spellCheck
             onInput={emit}
             onPaste={onPaste}
             onCopy={block}

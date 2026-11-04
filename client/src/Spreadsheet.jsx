@@ -70,6 +70,9 @@ export default function Spreadsheet({
   const clip = useRef(null);
   const [, bump] = useState(0);
   const [formulaHelp, setFormulaHelp] = useState(false);
+  const [zoom, setZoom] = useState(100);
+  const [findText, setFindText] = useState('');
+  const [showFind, setShowFind] = useState(false);
 
   const sel = {
     r1: Math.min(anchor.r, focus.r), r2: Math.max(anchor.r, focus.r),
@@ -90,6 +93,13 @@ export default function Spreadsheet({
     onChange({ ...data, cells: next });
     bump((n) => n + 1);
   }, [cells, data, onChange]);
+  const commitGrid = (next, rows = data.rows, cols = data.cols) => {
+    undoS.current.push(cells);
+    if (undoS.current.length > 60) undoS.current.shift();
+    redoS.current = [];
+    onChange({ ...data, rows: Math.max(1, rows), cols: Math.max(1, cols), cells: next });
+    bump((n) => n + 1);
+  };
   const doUndo = () => {
     if (!editable || !undoS.current.length) return;
     redoS.current.push(cells);
@@ -180,6 +190,34 @@ export default function Spreadsheet({
     if (skipped) blocked();
     commit(next);
   };
+  const shiftSelection = (dr, dc) => {
+    if (!editable) return;
+    const next = {};
+    for (const [k, cell] of Object.entries(cells)) {
+      const [oldR, oldC] = k.split(',').map(Number);
+      let r = oldR, c = oldC;
+      if (dr > 0 && r >= sel.r1) r += 1;
+      else if (dr < 0 && r > sel.r1) r -= 1;
+      else if (dr < 0 && r === sel.r1) continue;
+      if (dc > 0 && c >= sel.c1) c += 1;
+      else if (dc < 0 && c > sel.c1) c -= 1;
+      else if (dc < 0 && c === sel.c1) continue;
+      if (r >= 0 && c >= 0 && r < totalRows && c < totalCols) {
+        const moved = r !== oldR || c !== oldC;
+        next[key(r, c)] = moved && cell.f ? { ...cell, f: shiftFormula(cell.f, r - oldR, c - oldC) } : cell;
+      }
+    }
+    commitGrid(next, data.rows + (dr > 0 ? 1 : dr < 0 ? -1 : 0), data.cols + (dc > 0 ? 1 : dc < 0 ? -1 : 0));
+  };
+  const resizeSelectedColumns = () => {
+    if (!editable) return;
+    const width = Number(window.prompt('Độ rộng cột (px)', String(widths[sel.c1]))) || widths[sel.c1];
+    const colWidths = { ...(data.colWidths || {}) };
+    for (let c = sel.c1; c <= sel.c2; c++) colWidths[c] = clamp(width, 40, 500);
+    onChange({ ...data, colWidths });
+  };
+  const printSheet = () => window.print();
+  const cellMatches = (text) => findText && String(text).toLocaleLowerCase().includes(findText.toLocaleLowerCase());
   const insertFunction = (name) => {
     if (!activeOK) return;
     setEditing({ r: active.r, c: active.c, text: `=${name}()` });
@@ -348,7 +386,7 @@ export default function Spreadsheet({
           const isErr = typeof v === 'string' && /^#[A-Z0\/]+[!?]?$/.test(v);
           return (
             <div
-              className={'cell' + (isErr ? ' err' : '') + fl}
+              className={'cell' + (isErr ? ' err' : '') + (cellMatches(text) ? ' findmatch' : '') + fl}
               key={c}
               style={{
                 left: RN_W + lefts[c], width: widths[c],
@@ -420,6 +458,16 @@ export default function Spreadsheet({
           {FUNCTIONS.map(([name, label]) => <option key={name} value={name}>{name} — {label}</option>)}
         </select>
         <button disabled={!editable} onClick={() => setFormulaHelp((v) => !v)} title="Danh sách hàm được hỗ trợ">fx {formulaHelp ? 'Ẩn' : 'Hàm'}</button>
+        <button disabled={!editable} onClick={() => shiftSelection(1, 0)} title="Chèn dòng phía trên">+ Dòng</button>
+        <button disabled={!editable} onClick={() => shiftSelection(-1, 0)} title="Xóa dòng đang chọn">− Dòng</button>
+        <button disabled={!editable} onClick={() => shiftSelection(0, 1)} title="Chèn cột bên trái">+ Cột</button>
+        <button disabled={!editable} onClick={() => shiftSelection(0, -1)} title="Xóa cột đang chọn">− Cột</button>
+        <button disabled={!editable} onClick={resizeSelectedColumns} title="Đổi độ rộng cột">Độ rộng</button>
+        <button onClick={printSheet} title="In bảng tính">In</button>
+        <button onClick={() => setShowFind((v) => !v)} title="Tìm trong bảng tính">Tìm</button>
+        <select value={zoom} onChange={(e) => setZoom(Number(e.target.value))} title="Thu phóng">
+          {[75, 90, 100, 110, 125, 150].map((n) => <option key={n} value={n}>{n}%</option>)}
+        </select>
         {protectUI && (
           <>
             <span className="sep" />
@@ -437,6 +485,10 @@ export default function Spreadsheet({
         <span>{FUNCTIONS.map(([name]) => name).join(' · ')}</span>
         <small>Thư viện tính toán cũng hỗ trợ thêm các nhóm toán học, thống kê, ngày giờ, logic, chuỗi, kỹ thuật và tra cứu. Nhập công thức bắt đầu bằng dấu =.</small>
       </div>}
+      {showFind && <div className="sheet-find">
+        <input autoFocus value={findText} onChange={(e) => setFindText(e.target.value)} placeholder="Tìm nội dung trong bảng…" />
+        <button onClick={() => { setFindText(''); setShowFind(false); }}>Đóng</button>
+      </div>}
 
       <div className="fbar">
         <div className="namebox">{nameBox}</div>
@@ -453,7 +505,7 @@ export default function Spreadsheet({
       <div className="gridwrap" ref={wrapRef} tabIndex={0} onKeyDown={onKeyDown}
         onCopy={(e) => onCopy(e, false)} onCut={(e) => onCopy(e, true)} onPaste={onPaste}
         onContextMenu={(e) => { if (restricted) e.preventDefault(); }} onDragStart={(e) => e.preventDefault()}>
-        <div className="gscroll" ref={scrollRef} onScroll={syncView}>
+        <div className="gscroll" ref={scrollRef} onScroll={syncView} style={{ zoom: zoom / 100 }}>
           <div className="gbody" ref={bodyRef} style={{ width: RN_W + totalW, height: HEAD_H + totalRows * ROWH }}
             onMouseDown={onMouseDown} onDoubleClick={() => startEdit(rawText(activeCell))}>
             <div className="shead" style={{ width: RN_W + totalW, height: HEAD_H }}>
