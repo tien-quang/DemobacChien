@@ -75,7 +75,16 @@ export default function WordEditor({ html, editable, restricted, watermark, noti
 
   return (
     <div className="word">
+      <div className="office-window word-window">
+        <div className="office-brand"><b>Word</b><span>·</span><strong>Document</strong></div>
+        <div className="office-quick"><button title="Lưu">💾</button><button>↶</button><button>↷</button></div>
+        <div className="office-window-actions"><button>−</button><button>□</button><button>×</button></div>
+      </div>
+      <div className="office-tabs word-tabs">
+        <button className="active">Home</button><button>Insert</button><button>Page Layout</button><button>References</button><button>Review</button><button>View</button><span className="office-search">⌕ <span>Tell me what you want to do</span></span>
+      </div>
       <div className="ribbon" onMouseDown={keep}>
+        <span className="ribbon-group-label">Clipboard</span>
         <button disabled={dis} onClick={() => cmd('undo')}>Hoàn tác</button>
         <button disabled={dis} onClick={() => cmd('redo')}>Làm lại</button>
         <span className="sep" />

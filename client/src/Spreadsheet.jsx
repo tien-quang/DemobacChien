@@ -431,10 +431,18 @@ export default function Spreadsheet({
 
   return (
     <div className="sheet">
+      <div className="office-window excel-window">
+        <div className="office-brand"><b>Excel</b><span>·</span><strong>{sheetName}</strong></div>
+        <div className="office-quick"><button title="Lưu">💾</button><button title="Hoàn tác" onClick={doUndo}>↶</button><button title="Làm lại" onClick={doRedo}>↷</button></div>
+        <div className="office-window-actions"><button>−</button><button>□</button><button>×</button></div>
+      </div>
+      <div className="office-tabs">
+        <button className="active">Home</button><button>Insert</button><button>Page Layout</button><button>Formulas</button><button>Data</button><button>Review</button><button>View</button><span className="office-search">⌕ <span>Tell me what you want to do</span></span>
+      </div>
       <div className="ribbon" onMouseDown={(e) => { if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') e.preventDefault(); }}>
         <button disabled={!editable || !undoS.current.length} onClick={doUndo} title="Hoàn tác (Ctrl+Z)">Hoàn tác</button>
         <button disabled={!editable || !redoS.current.length} onClick={doRedo} title="Làm lại (Ctrl+Y)">Làm lại</button>
-        <span className="sep" />
+        <span className="ribbon-group-label">Clipboard</span><span className="sep" />
         <button disabled={dis} className={s.b ? 'on' : ''} onClick={() => toggle('b')} title="Đậm (Ctrl+B)"><b>B</b></button>
         <button disabled={dis} className={s.i ? 'on' : ''} onClick={() => toggle('i')} title="Nghiêng (Ctrl+I)"><i>I</i></button>
         <button disabled={dis} className={s.u ? 'on' : ''} onClick={() => toggle('u')} title="Gạch chân (Ctrl+U)"><u>U</u></button>

@@ -93,6 +93,27 @@ table.list { width: 100%; border-collapse: collapse; }
 .docbody { flex: 1; min-height: 0; position: relative; display: flex; }
 .sheet, .word { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
+.office-window { height: 34px; display: flex; align-items: center; padding: 0 10px; color: #fff; flex: none; }
+.excel-window { background: #107c41; }
+.word-window { background: #185abd; }
+.office-brand { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.office-brand b { font-size: 16px; }
+.office-brand span { opacity: .7; }
+.office-brand strong { font-weight: 400; opacity: .9; }
+.office-quick { display: flex; gap: 2px; margin-left: 18px; }
+.office-quick button, .office-window-actions button { padding: 1px 7px; border: 0; color: #fff; background: transparent; }
+.office-quick button:hover, .office-window-actions button:hover { background: rgba(255,255,255,.18); }
+.office-window-actions { display: flex; margin-left: auto; }
+.office-tabs { height: 34px; display: flex; align-items: end; gap: 2px; padding: 0 12px; background: #fff; border-bottom: 1px solid #d6d6d6; flex: none; }
+.office-tabs button { border: 0; border-radius: 0; padding: 8px 13px 7px; background: transparent; font-size: 12px; }
+.office-tabs button:hover { background: #f0f0f0; }
+.office-tabs button.active { color: #107c41; border-bottom: 3px solid #107c41; font-weight: 600; }
+.word-tabs button.active { color: #185abd; border-bottom-color: #185abd; }
+.office-search { margin: 0 0 5px 12px; min-width: 210px; padding: 5px 10px; color: #777; border: 1px solid #ddd; border-radius: 3px; font-size: 12px; }
+.office-search span { margin-left: 5px; }
+.ribbon-group-label { align-self: flex-end; color: #777; font-size: 10px; margin: 0 3px 1px; }
+.word .ribbon { padding-top: 8px; }
+
 .ribbon {
   display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 10px;
   background: #f7f6f5; border-bottom: 1px solid var(--line);
