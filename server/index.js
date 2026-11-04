@@ -16,7 +16,6 @@ const { samples } = require('./sample');
 const { colName } = require('./refs');
 const { materialize } = require('./formula');
 const { safeHtmlForDocx } = require('./docsafe');
-const oo = require('./onlyoffice');
 
 const PORT = process.env.PORT || 4000;
 const app = express();
@@ -39,9 +38,6 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: '2mb' }));
-
-// ---------- ONLYOFFICE: Document Server gọi vào đây bằng liên kết ký sẵn + JWT (không có cookie phiên) ----------
-oo.mount(app);
 
 // ---------- chống CSRF: cookie SameSite=Strict + kiểm tra Origin cho mọi request ghi ----------
 app.use('/api', (req, res, next) => {
@@ -200,13 +196,13 @@ app.post('/api/books/sample', adminOnly, (req, res) => {
   A(req, 'create_sample'); res.json({ ids });
 });
 
-// Tải lên: .xlsx (mỗi sheet thành 1 workbook nhỏ) hoặc .docx (1 văn bản). Có header x-book thì thêm vào workbook lớn đã có.
+// Tải lên: .xlsx (mỗi sheet), .docx (1 văn bản), hoặc .pdf (1 tài liệu xem). Có header x-book thì thêm vào workbook lớn đã có.
 app.post('/api/books/upload', adminOnly, express.raw({ type: 'application/octet-stream', limit: '20mb' }), async (req, res) => {
   try {
     const name = decodeURIComponent(req.headers['x-filename'] || 'tai-lieu');
     const ext = path.extname(name).toLowerCase();
     const buf = req.body;
-    if (!Buffer.isBuffer(buf) || buf.length < 4 || buf[0] !== 0x50 || buf[1] !== 0x4b) throw E(400, 'File không hợp lệ (chỉ nhận .xlsx hoặc .docx)');
+    if (!Buffer.isBuffer(buf) || buf.length < 4) throw E(400, 'File không hợp lệ');
     const book = req.headers['x-book'] ? getBook(String(req.headers['x-book'])) : null;
     const title = path.basename(name, ext).slice(0, 120);
     let parts, warnings = [];
@@ -218,7 +214,10 @@ app.post('/api/books/upload', adminOnly, express.raw({ type: 'application/octet-
       const r = await mammoth.convertToHtml({ buffer: buf });
       if (r.value.length > 5e6) throw E(400, 'Văn bản quá lớn');
       parts = [{ name: title, type: 'word', data: { html: r.value } }];
-    } else throw E(400, 'Chỉ nhận .xlsx hoặc .docx');
+    } else if (ext === '.pdf') {
+      if (buf.subarray(0, 5).toString() !== '%PDF-') throw E(400, 'File PDF không hợp lệ');
+      parts = [{ name: title, type: 'pdf', data: { pdf: buf.toString('base64') } }];
+    } else throw E(400, 'Chỉ nhận .xlsx, .docx hoặc .pdf');
     const target = book || newBook(title, req.user.id);
     parts.forEach((p) => store.newItem(target, uniqueName(target, p.name), p.type, p.data));
     A(req, 'upload', null, { book: target.id, items: parts.length });
@@ -238,7 +237,7 @@ app.get('/api/books/:id', adminOnly, (req, res) => {
 app.get('/api/books/:id/data', adminOnly, (req, res) => {
   const b = getBook(req.params.id);
   A(req, 'open_book', null, { book: b.id });
-  res.json(Object.fromEntries(store.bookItems(b).map((i) => [i.id, { data: i.data, protect: i.protect, version: i.version }])));
+  res.json(Object.fromEntries(store.bookItems(b).map((i) => [i.id, { data: i.type === 'pdf' ? null : i.data, protect: i.protect, version: i.version }])));
 });
 app.patch('/api/books/:id', adminOnly, (req, res) => {
   const b = getBook(req.params.id);
@@ -360,28 +359,21 @@ app.get('/api/my-items', (req, res) => {
   const mine = [...store.items.values()].filter((i) => i.assigneeId === req.user.id);
   res.json(mine.map((i) => { const v = core.userView(i, req.user); return { id: v.id, name: v.name, type: v.type, status: v.status, editable: v.editable, deadline: v.deadline, pastDue: v.pastDue, returnNote: v.returnNote }; }));
 });
-app.get('/api/onlyoffice/status', (req, res) => res.json({ enabled: oo.enabled() }));
-app.get('/api/items/:id/onlyoffice', async (req, res, next) => {
-  try {
-    if (!oo.enabled()) throw E(404, 'ONLYOFFICE chưa được cấu hình');
-    const r = await oo.editorConfig(req.user, req.params.id, ipOf(req));
-    core.markOpened(req.user, core.getReadable(req.user, req.params.id, ipOf(req)));
-    A(req, 'open', req.params.id);
-    res.json(r);
-  } catch (e) { next(e); }
-});
 app.get('/api/items/:id', (req, res) => {
   const it = core.getReadable(req.user, req.params.id, ipOf(req));
   core.markOpened(req.user, it);
   A(req, 'open', it.id);
   const view = core.userView(it, req.user);
-  res.json({ item: core.isAdmin(req.user) ? { ...view, ...core.adminView(it) } : view, data: it.data });
+  res.json({ item: core.isAdmin(req.user) ? { ...view, ...core.adminView(it) } : view, data: it.type === 'pdf' ? null : it.data });
+});
+app.get('/api/items/:id/file', (req, res) => {
+  const it = core.getReadable(req.user, req.params.id, ipOf(req));
+  if (it.type !== 'pdf') throw E(404, 'Không tìm thấy file PDF');
+  A(req, 'open_pdf', it.id);
+  res.type('application/pdf').send(Buffer.from(it.data.pdf, 'base64'));
 });
 app.post('/api/items/:id/submit', async (req, res, next) => {
   try {
-    // Workbook mở bằng ONLYOFFICE: ép lưu phần chưa lưu trước khi chốt bản nộp (core.submit vẫn kiểm tra quyền như cũ)
-    const cur = core.getReadable(req.user, req.params.id, ipOf(req));
-    if (core.perm(req.user, cur).edit) await oo.flush(cur);
     const it = core.submit(req.user, req.params.id, ipOf(req));
     res.json({ ok: true, submittedAt: it.submittedAt });
   } catch (e) { next(e); }
@@ -413,6 +405,7 @@ app.get('/api/items/:id/export', adminOnly, async (req, res) => {
   const it = core.getReadable(req.user, req.params.id, ipOf(req));
   let buf, ext, mime;
   if (it.type === 'excel') { buf = Buffer.from(await exportXlsx({ parts: [{ name: it.name.slice(0, 31), data: materialize(it.data, it.name, {}) }] })); ext = 'xlsx'; mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'; }
+  else if (it.type === 'pdf') { buf = Buffer.from(it.data.pdf, 'base64'); ext = 'pdf'; mime = 'application/pdf'; }
   else { buf = Buffer.from(await HTMLtoDOCX('<html><body>' + safeHtmlForDocx(it.data.html) + '</body></html>')); ext = 'docx'; mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'; }
   A(req, 'export_item', it.id);
   res.set({ 'Content-Type': mime, 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(it.name)}.${ext}` });
@@ -425,8 +418,7 @@ app.use('/api', (req, res) => res.status(404).json({ error: 'Không tìm thấy'
 const DIST = path.join(__dirname, '..', 'client', 'dist');
 if (fs.existsSync(DIST)) {
   app.use((req, res, next) => {
-    const ooHost = oo.enabled() ? ' ' + oo.CFG.url : '';
-    res.set('Content-Security-Policy', `default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'${ooHost}; frame-src 'self'${ooHost}; connect-src 'self' ws: wss:${ooHost}; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`);
+    res.set('Content-Security-Policy', "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     next();
   });
   app.use(express.static(DIST));

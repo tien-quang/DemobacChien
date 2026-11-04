@@ -45,35 +45,15 @@ Tài khoản demo: admin / admin123, user1 đến user10 / user123.
 5. User "Nộp bài". Admin thấy chuyển "Chờ duyệt": bấm "Trả lại" kèm lý do. User thấy khung đỏ ghi lý do, sửa và nộp lại. Admin "Duyệt".
 6. Tab "Tổng hợp": bản mới có sẵn, tải .xlsx / .docx, "So với bản trước" xem ô nào đã đổi.
 
-## Soạn thảo Word và Excel bằng ONLYOFFICE (tùy chọn)
+## Bộ editor cục bộ
 
-Mặc định Word và Excel dùng trình soạn thảo đơn giản trong trình duyệt. Đặt 3 biến môi trường dưới đây thì MỌI workbook nhỏ (Word và Excel)
-mở bằng ONLYOFFICE Docs, cả ở trang admin lẫn trang user (giao diện như Word/Excel thật: định dạng, bảng, công thức, biểu đồ...). Không đặt thì mọi thứ chạy như cũ.
+Ứng dụng không cần Document Server hoặc Docker:
 
-    cp .env.example .env            # sửa ONLYOFFICE_JWT_SECRET thành chuỗi ngẫu nhiên dài
-    docker compose --env-file .env up -d      # Document Server tại http://localhost:8080
-    # nạp biến môi trường rồi chạy ứng dụng, ví dụ (Linux/Mac):
-    set -a; . ./.env; set +a; npm start
-    # Windows PowerShell: đặt $env:ONLYOFFICE_URL=...; $env:ONLYOFFICE_APP_URL=...; $env:ONLYOFFICE_JWT_SECRET=...; npm start
+- Excel dùng lưới React nội bộ, công thức, định dạng, bảo vệ ô và cập nhật realtime.
+- Word dùng editor HTML dạng trang giấy, có ribbon và sanitization trước khi lưu.
+- PDF dùng PDF.js để render từng trang trên trình duyệt; file chỉ xem và được stream qua endpoint có kiểm tra quyền.
 
-Cách hoạt động: dữ liệu vẫn là HTML trong workbook nhỏ. Khi mở, máy chủ đổi HTML thành .docx và đưa cho Document Server qua liên kết ký sẵn (10 phút).
-Khi lưu (đóng tài liệu hoặc tự lưu), Document Server gọi `/oo/callback/...` kèm JWT; máy chủ đổi .docx về HTML và ghi qua `core.applyEdit`,
-nên quyền sửa, hạn nộp, trạng thái đã nộp, nhật ký thao tác và WebSocket cho admin vẫn như cũ. Bấm "Nộp bài" sẽ ép Document Server lưu phần chưa lưu trước khi chốt bản nộp.
-
-- Excel: lưu về chỉ áp các ô thay đổi, qua `core.applyEdit`. Ô bị khóa (protect) không khóa được bên trong ONLYOFFICE; máy chủ bỏ thay đổi vào ô khóa của user khi lưu và ghi nhật ký. Admin có nút "Bảng cũ" để đặt khóa ô và xem con trỏ thời gian thực. Biểu đồ/ảnh/ô gộp trong ONLYOFFICE không được lưu lại vì mô hình ô hiện chỉ có giá trị, công thức, kiểu cơ bản.
-- Bản Community giới hạn 20 kết nối đồng thời theo giấy phép của hãng. Cần nhiều hơn thì mua giấy phép Developer/Enterprise; code không đổi.
-- Vì lưu lại dưới dạng HTML nên một số định dạng nâng cao của Word (phông riêng, mục lục, chú thích, đầu trang/chân trang) có thể mất khi lưu. Đây là giới hạn của mô hình dữ liệu HTML hiện tại.
-- Production: đặt cả ứng dụng và Document Server sau HTTPS, dùng JWT secret riêng, không mở cổng 8080 ra Internet nếu không cần.
-- Kiểm thử: `npm run test:oo` (44 kiểm tra với Document Server giả, gồm Word và Excel: JWT, liên kết ký sẵn, chống SSRF, ô khóa, quyền sau khi nộp, ép lưu khi nộp).
-
-### Cấu hình trên Render
-
-Render không tự chạy `docker-compose.yml`. Nếu dùng Document Server public, đặt các biến
-`ONLYOFFICE_URL`, `ONLYOFFICE_INTERNAL_URL`, `ONLYOFFICE_APP_URL` và
-`ONLYOFFICE_JWT_SECRET` trong Environment của service. `render.yaml` đã điền sẵn URL
-Document Server và URL ứng dụng; chỉ cần nhập `ONLYOFFICE_JWT_SECRET`, phải trùng với
-JWT secret trên Document Server. Nếu Document Server dùng tiêu đề JWT khác `Authorization`,
-đặt thêm `ONLYOFFICE_JWT_HEADER` tương ứng; Docs Connect thường dùng `AuthorizationJWT`.
+Các editor dùng chung model quyền, nhật ký và lưu trữ mã hóa hiện tại. `.xlsx`, `.docx` và `.pdf` đều có thể tải lên từ trang quản trị.
 
 ## Mô hình lưu trữ và bảo mật
 

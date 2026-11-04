@@ -68,10 +68,15 @@ async function consolidate({ bookId, mode, by }) {
     } else if (mode === 'latest') { data = it.data; row.source = 'draft'; row.note = 'Bản nháp (chưa nộp)'; }
     else row.note = 'Chưa nộp: không đưa vào';
     if (data) {
-      row.included = true;
-      if (!row.hash) row.hash = store.sha(store.canon(data));
-      if (!row.snapshotId) row.snapshotId = store.snapshotByHash(it.id, row.hash) || store.createSnapshot(it, 'consolidation', by, row.hash, null);
-      included.push({ it, data });
+      row.included = it.type !== 'pdf';
+      if (it.type === 'pdf') {
+        row.included = false;
+        row.note = 'PDF chỉ xem: không đưa vào file tổng hợp';
+      } else {
+        if (!row.hash) row.hash = store.sha(store.canon(data));
+        if (!row.snapshotId) row.snapshotId = store.snapshotByHash(it.id, row.hash) || store.createSnapshot(it, 'consolidation', by, row.hash, null);
+        included.push({ it, data });
+      }
     }
     const p = prevRows.get(it.id);
     row.changed = !!p && (p.hash !== row.hash || p.included !== row.included);

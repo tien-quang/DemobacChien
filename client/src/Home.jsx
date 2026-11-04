@@ -42,7 +42,7 @@ export function HomeAdmin() {
           <div className="row">
             <button className="primary" disabled={busy} onClick={() => fileRef.current.click()}>Tải lên .xlsx / .docx</button>
           </div>
-          <input ref={fileRef} type="file" multiple hidden accept=".xlsx,.docx" onChange={(e) => { upload([...e.target.files]); e.target.value = ''; }} />
+          <input ref={fileRef} type="file" multiple hidden accept=".xlsx,.docx,.pdf,application/pdf" onChange={(e) => { upload([...e.target.files]); e.target.value = ''; }} />
         </div>
         <div className="tile word">
           <h2>Dữ liệu mẫu để demo</h2>
@@ -86,7 +86,7 @@ export function HomeUser() {
       <h1>Workbook được giao cho bạn</h1>
       {!items ? <p className="muted">Đang tải…</p> : items.length === 0 ? <p className="muted">Hiện chưa có workbook nào được giao cho bạn.</p> : items.map((i) => (
         <div className="doccard" key={i.id}>
-          <div className={'badge ' + i.type}>{i.type === 'excel' ? 'X' : 'W'}</div>
+          <div className={'badge ' + i.type}>{i.type === 'excel' ? 'X' : i.type === 'pdf' ? 'P' : 'W'}</div>
           <div className="grow">
             <a className="doctitle" href={'#/item/' + i.id}>{i.name}</a>
             <div className="muted small">

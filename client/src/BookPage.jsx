@@ -4,8 +4,9 @@ import { live } from './live.js';
 import { diffGrid, applyPatch } from './diff.js';
 import { go, fmt, useLive, useToast, ConnDot, Modal, STATUS, deadlineText } from './util.jsx';
 import Spreadsheet from './Spreadsheet.jsx';
-import WordPane, { OfficePane, useOnlyOffice } from './OnlyOfficeEditor.jsx';
+import WordPane, { OfficePane } from './LocalEditors.jsx';
 import Consolidation from './Consolidation.jsx';
+import PdfViewer from './PdfViewer.jsx';
 
 const toLocalInput = (iso) => {
   if (!iso) return '';
@@ -73,7 +74,7 @@ function Overview({ book, online, users, onOpen, reload, flash }) {
       ) : <p className="muted">Chưa có sự kiện nào.</p>,
     });
   });
-  const exportItem = guard((it) => api.download(`/items/${it.id}/export`, `${it.name}.${it.type === 'excel' ? 'xlsx' : 'docx'}`));
+  const exportItem = guard((it) => api.download(`/items/${it.id}/export`, `${it.name}.${it.type === 'excel' ? 'xlsx' : it.type === 'pdf' ? 'pdf' : 'docx'}`));
 
   const count = (s) => book.items.filter((i) => i.status === s).length;
   return (
@@ -93,11 +94,11 @@ function Overview({ book, online, users, onOpen, reload, flash }) {
         <button onClick={() => setDraft(Object.fromEntries(book.items.map((i) => [i.id, ''])))}>Bỏ hết</button>
         <button className="primary" disabled={busy || !total} onClick={save}>Lưu phân quyền{total ? ` (${total})` : ''}</button>
         <span className="grow" />
-        <button disabled={busy} onClick={() => fileRef.current.click()}>Thêm từ .xlsx / .docx</button>
+        <button disabled={busy} onClick={() => fileRef.current.click()}>Thêm .xlsx / .docx / .pdf</button>
         <button disabled={busy} onClick={() => addBlank('excel')}>Thêm sheet trống</button>
         <button disabled={busy} onClick={() => addBlank('word')}>Thêm văn bản trống</button>
         <button disabled={busy} onClick={guard(() => api.download(`/books/${book.id}/export`, `${book.title}.xlsx`))}>Xuất bản hiện tại (.xlsx)</button>
-        <input ref={fileRef} type="file" hidden accept=".xlsx,.docx" onChange={(e) => { addFile(e.target.files[0]); e.target.value = ''; }} />
+        <input ref={fileRef} type="file" hidden accept=".xlsx,.docx,.pdf,application/pdf" onChange={(e) => { addFile(e.target.files[0]); e.target.value = ''; }} />
       </div>
 
       <table className="list">
@@ -109,7 +110,7 @@ function Overview({ book, online, users, onOpen, reload, flash }) {
             <tr key={it.id}>
               <td>
                 <a href="#/" className="linklike" onClick={(e) => { e.preventDefault(); onOpen(it.id); }}>
-                  <span className={'mini ' + it.type}>{it.type === 'excel' ? 'X' : 'W'}</span> {it.name}
+                  <span className={'mini ' + it.type}>{it.type === 'excel' ? 'X' : it.type === 'pdf' ? 'P' : 'W'}</span> {it.name}
                 </a>
                 {online.has(it.id) && <span className="live-chip"> <i className="pulse" /> đang làm</span>}
               </td>
@@ -151,8 +152,6 @@ function Overview({ book, online, users, onOpen, reload, flash }) {
 
 /* ================= Trang workbook lớn (admin) ================= */
 export default function BookPage({ me, id }) {
-  const ooOn = useOnlyOffice();
-  const [classicGrid, setClassicGrid] = useState(false);
   const [book, setBook] = useState(null);
   const [datas, setDatas] = useState({});
   const [online, setOnline] = useState(new Set());
@@ -251,18 +250,12 @@ export default function BookPage({ me, id }) {
           <Overview book={book} online={online} users={users} onOpen={setActive} reload={load} flash={flash} />
         ) : active === 'consol' ? (
           <Consolidation bookId={book.id} flash={flash} />
-        ) : !it || !d ? <p className="wrap muted">Đang tải…</p> : it.type === 'excel' ? (
+        ) : !it || !d ? <p className="wrap muted">Đang tải…</p> : it.type === 'pdf' ? (
+          <PdfViewer itemId={it.id} editable={editable} notice={notice} />
+        ) : it.type === 'excel' ? (
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-            {ooOn === true && (
-              <div className="ribbon" style={{ flex: 'none' }}>
-                <button onClick={() => setClassicGrid((v) => !v)}>
-                  {classicGrid ? 'Quay lại ONLYOFFICE' : 'Bảng cũ (để khóa ô / theo dõi con trỏ)'}
-                </button>
-                {!classicGrid && <span className="notice">Ô bị khóa chỉ áp dụng khi lưu từ ONLYOFFICE: thay đổi vào ô khóa của user sẽ bị bỏ.</span>}
-              </div>
-            )}
             <OfficePane
-              key={it.id} id={it.id} editable={editable} notice={notice} force={classicGrid}
+              key={it.id} id={it.id} editable={editable} notice={notice}
               classic={<Spreadsheet
                 key={it.id} sheetName={it.name} data={d.data} others={others} editable={editable} restricted={false}
                 protect={d.protect} remote={online.has(it.id) ? cursors[it.id] : null} flash={flashes[it.id]} notice={notice}

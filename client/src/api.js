@@ -63,4 +63,5 @@ export const api = {
         },
       })),
   download: async (path, filename) => save(await request(path, 'GET', undefined, { blob: true }), filename),
+  blob: (path) => request(path, 'GET', undefined, { blob: true }),
 };

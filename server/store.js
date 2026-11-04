@@ -204,6 +204,9 @@ function entry(it) {
   if (it.type === 'word') {
     const r = P('SELECT data FROM chunks WHERE item_id=? AND chunk=0').get(it.id);
     data = r ? unpack(dek, r.data, `chunk:${it.id}:0`) : { html: '' };
+  } else if (it.type === 'pdf') {
+    const r = P('SELECT data FROM chunks WHERE item_id=? AND chunk=0').get(it.id);
+    data = r ? unpack(dekOf(it.bookId), r.data, `chunk:${it.id}:0`) : { pdf: '' };
   } else {
     data = { rows: 100, cols: 26, colWidths: {}, cells: {} };
     for (const r of P('SELECT chunk, data FROM chunks WHERE item_id=?').all(it.id)) {
@@ -221,6 +224,7 @@ function writeAll(it, data) { // ghi toàn bộ dữ liệu (khi tạo mới ho�
   const dek = dekOf(it.bookId);
   P('DELETE FROM chunks WHERE item_id=?').run(it.id);
   if (it.type === 'word') P('INSERT INTO chunks VALUES(?,?,?)').run(it.id, 0, pack(dek, { html: data.html }, `chunk:${it.id}:0`));
+  else if (it.type === 'pdf') P('INSERT INTO chunks VALUES(?,?,?)').run(it.id, 0, pack(dek, { pdf: data.pdf }, `chunk:${it.id}:0`));
   else {
     P('INSERT INTO chunks VALUES(?,?,?)').run(it.id, -1, pack(dek, { rows: data.rows, cols: data.cols, colWidths: data.colWidths }, `chunk:${it.id}:-1`));
     const by = new Map();

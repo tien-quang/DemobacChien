@@ -70,6 +70,7 @@ function cleanPatch(patch) {
 
 function applyEdit(user, id, msg, ip) {
   const it = getReadable(user, id, ip);
+  if (it.type === 'pdf') throw E(403, 'PDF chỉ hỗ trợ xem');
   const p = perm(user, it);
   if (FINAL.has(it.status) && !p.admin) throw E(409, 'Đã nộp, không thể sửa');
   if (!p.edit) throw E(403, p.pastDue ? 'Đã quá hạn nộp' : 'Bạn chỉ được xem phần này');

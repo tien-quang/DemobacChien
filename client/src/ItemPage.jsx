@@ -4,7 +4,8 @@ import { live } from './live.js';
 import { diffGrid } from './diff.js';
 import { go, useLive, useToast, deadlineText, ConnDot, STATUS } from './util.jsx';
 import Spreadsheet from './Spreadsheet.jsx';
-import WordPane, { OfficePane } from './OnlyOfficeEditor.jsx';
+import WordPane, { OfficePane } from './LocalEditors.jsx';
+import PdfViewer from './PdfViewer.jsx';
 
 // Workbook nhỏ của user: cửa sổ độc lập, chỉ chứa đúng 1 bảng, không có tab/sheet/workbook nào khác.
 export default function ItemPage({ me, id }) {
@@ -64,7 +65,7 @@ export default function ItemPage({ me, id }) {
   };
 
   if (error) return <div className="wrap"><p className="err">{error}</p><button onClick={() => go('#/')}>Về danh sách</button></div>;
-  if (!item || !data) return <div className="wrap muted">Đang tải…</div>;
+  if (!item || (item.type !== 'pdf' && !data)) return <div className="wrap muted">Đang tải…</div>;
 
   const wm = `${me.name} · ${me.username} · #${me.tag} · ${new Date().toLocaleDateString('vi-VN')}`;
   const admin = me.role === 'admin';
@@ -85,7 +86,9 @@ export default function ItemPage({ me, id }) {
       </div>
       {item.returnNote && item.editable && <div className="return-note"><b>Quản trị viên trả lại bài:</b> {item.returnNote}</div>}
       <div className="docbody">
-        {item.type === 'excel' ? (
+        {item.type === 'pdf' ? (
+          <PdfViewer itemId={item.id} editable={item.editable} watermark={wm} notice={notice} />
+        ) : item.type === 'excel' ? (
           <OfficePane
             key={item.id} id={item.id} editable={item.editable} notice={notice}
             classic={<Spreadsheet
