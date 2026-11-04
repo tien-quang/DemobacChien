@@ -103,6 +103,9 @@ table.list { width: 100%; border-collapse: collapse; }
 .ribbon .color { display: inline-flex; align-items: center; gap: 4px; padding: 0 4px; }
 .ribbon input[type=color] { width: 26px; height: 24px; padding: 0; border: 1px solid #c8c6c4; background: #fff; }
 .ribbon .notice { margin-left: auto; color: var(--warn); font-size: 12.5px; background: #fff4ce; padding: 2px 8px; border-radius: 3px; }
+.formula-help { display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; padding: 6px 10px; background: #f0f7f3; border-bottom: 1px solid #c8dfd1; color: var(--excel); font-size: 12px; }
+.formula-help span { color: var(--ink); }
+.formula-help small { color: var(--muted); }
 
 .fbar { display: flex; align-items: center; border-bottom: 1px solid var(--line); background: #fff; }
 .namebox { width: 96px; padding: 4px 10px; border-right: 1px solid var(--line); font-weight: 600; text-align: center; }

@@ -12,6 +12,21 @@ const FORMATS = [
   ['#,##0 "₫"', 'Tiền Việt'],
   ['dd/mm/yyyy', 'Ngày'],
 ];
+const FUNCTIONS = [
+  ['SUM', 'Cộng'], ['AVERAGE', 'Trung bình'], ['MIN', 'Nhỏ nhất'], ['MAX', 'Lớn nhất'],
+  ['COUNT', 'Đếm số'], ['COUNTA', 'Đếm ô có dữ liệu'], ['COUNTIF', 'Đếm theo điều kiện'],
+  ['SUMIF', 'Cộng theo điều kiện'], ['AVERAGEIF', 'Trung bình theo điều kiện'],
+  ['IF', 'Điều kiện'], ['IFS', 'Nhiều điều kiện'], ['IFERROR', 'Nếu lỗi'],
+  ['AND', 'Và'], ['OR', 'Hoặc'], ['NOT', 'Phủ định'],
+  ['VLOOKUP', 'Tra cứu dọc'], ['HLOOKUP', 'Tra cứu ngang'], ['INDEX', 'Vị trí'],
+  ['MATCH', 'Tìm vị trí'], ['ROUND', 'Làm tròn'], ['ROUNDUP', 'Làm tròn lên'],
+  ['ROUNDDOWN', 'Làm tròn xuống'], ['ABS', 'Giá trị tuyệt đối'], ['POWER', 'Lũy thừa'],
+  ['SQRT', 'Căn bậc hai'], ['CONCATENATE', 'Nối chuỗi'], ['LEFT', 'Lấy bên trái'],
+  ['RIGHT', 'Lấy bên phải'], ['MID', 'Lấy giữa'], ['LEN', 'Độ dài'],
+  ['TRIM', 'Bỏ khoảng trắng'], ['UPPER', 'Viết hoa'], ['LOWER', 'Viết thường'],
+  ['TODAY', 'Ngày hiện tại'], ['NOW', 'Ngày giờ hiện tại'], ['DATE', 'Tạo ngày'],
+  ['YEAR', 'Lấy năm'], ['MONTH', 'Lấy tháng'], ['DAY', 'Lấy ngày'],
+];
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 
 /**
@@ -54,6 +69,7 @@ export default function Spreadsheet({
   const undoS = useRef([]), redoS = useRef([]);
   const clip = useRef(null);
   const [, bump] = useState(0);
+  const [formulaHelp, setFormulaHelp] = useState(false);
 
   const sel = {
     r1: Math.min(anchor.r, focus.r), r2: Math.max(anchor.r, focus.r),
@@ -163,6 +179,11 @@ export default function Spreadsheet({
     });
     if (skipped) blocked();
     commit(next);
+  };
+  const insertFunction = (name) => {
+    if (!activeOK) return;
+    setEditing({ r: active.r, c: active.c, text: `=${name}()` });
+    wrapRef.current?.focus();
   };
 
   // ----- clipboard: user không thể copy dữ liệu ra ngoài ứng dụng -----
@@ -394,6 +415,11 @@ export default function Spreadsheet({
           onChange={(e) => applyStyle({ nf: e.target.value === 'General' ? 0 : e.target.value })} title="Định dạng số">
           {FORMATS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
+        <select disabled={dis} value="" onChange={(e) => e.target.value && insertFunction(e.target.value)} title="Chèn hàm Excel">
+          <option value="">Hàm Excel…</option>
+          {FUNCTIONS.map(([name, label]) => <option key={name} value={name}>{name} — {label}</option>)}
+        </select>
+        <button disabled={!editable} onClick={() => setFormulaHelp((v) => !v)} title="Danh sách hàm được hỗ trợ">fx {formulaHelp ? 'Ẩn' : 'Hàm'}</button>
         {protectUI && (
           <>
             <span className="sep" />
@@ -406,6 +432,11 @@ export default function Spreadsheet({
         )}
         {notice && <span className="notice">{notice}</span>}
       </div>
+      {formulaHelp && <div className="formula-help">
+        <b>Hàm Excel được hỗ trợ</b>
+        <span>{FUNCTIONS.map(([name]) => name).join(' · ')}</span>
+        <small>Thư viện tính toán cũng hỗ trợ thêm các nhóm toán học, thống kê, ngày giờ, logic, chuỗi, kỹ thuật và tra cứu. Nhập công thức bắt đầu bằng dấu =.</small>
+      </div>}
 
       <div className="fbar">
         <div className="namebox">{nameBox}</div>

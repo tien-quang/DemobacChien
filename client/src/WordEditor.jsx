@@ -33,6 +33,23 @@ export default function WordEditor({ html, editable, restricted, watermark, noti
     document.execCommand(name, false, arg);
     emit();
   };
+  const promptLink = () => {
+    const url = window.prompt('Địa chỉ liên kết (https://...)');
+    if (url) cmd('createLink', url);
+  };
+  const insertImage = () => {
+    if (!editable) return;
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = 'image/*';
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file || file.size > 2 * 1024 * 1024) return;
+      const reader = new FileReader();
+      reader.onload = () => cmd('insertImage', reader.result);
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  };
   const block = (e) => { if (restricted) e.preventDefault(); };
   const onPaste = (e) => {
     e.preventDefault();
@@ -41,9 +58,11 @@ export default function WordEditor({ html, editable, restricted, watermark, noti
     emit();
   };
   const insertTable = () => {
+    const rows = Math.max(1, Math.min(20, Number(window.prompt('Số dòng', '3')) || 3));
+    const cols = Math.max(1, Math.min(12, Number(window.prompt('Số cột', '3')) || 3));
     const cell = '<td style="border:1px solid #999;padding:6px;min-width:60px">&nbsp;</td>';
-    const row = `<tr>${cell.repeat(3)}</tr>`;
-    cmd('insertHTML', `<table style="border-collapse:collapse;width:100%"><tbody>${row.repeat(3)}</tbody></table><p><br></p>`);
+    const row = `<tr>${cell.repeat(cols)}</tr>`;
+    cmd('insertHTML', `<table style="border-collapse:collapse;width:100%"><tbody>${row.repeat(rows)}</tbody></table><p><br></p>`);
   };
   const dis = !editable;
   const keep = (e) => { if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') e.preventDefault(); };
@@ -60,6 +79,12 @@ export default function WordEditor({ html, editable, restricted, watermark, noti
           <option value="H2">Tiêu đề 2</option>
           <option value="H3">Tiêu đề 3</option>
         </select>
+        <select disabled={dis} defaultValue="" onChange={(e) => e.target.value && cmd('fontName', e.target.value)} title="Phông chữ">
+          <option value="">Phông chữ</option><option>Arial</option><option>Calibri</option><option>Georgia</option><option>Tahoma</option><option>Times New Roman</option><option>Verdana</option>
+        </select>
+        <select disabled={dis} defaultValue="" onChange={(e) => e.target.value && cmd('fontSize', e.target.value)} title="Cỡ chữ">
+          <option value="">Cỡ chữ</option><option value="1">8</option><option value="2">10</option><option value="3">12</option><option value="4">14</option><option value="5">18</option><option value="6">24</option><option value="7">32</option>
+        </select>
         <button disabled={dis} onClick={() => cmd('bold')}><b>B</b></button>
         <button disabled={dis} onClick={() => cmd('italic')}><i>I</i></button>
         <button disabled={dis} onClick={() => cmd('underline')}><u>U</u></button>
@@ -74,9 +99,18 @@ export default function WordEditor({ html, editable, restricted, watermark, noti
         <button disabled={dis} onClick={() => cmd('justifyLeft')}>Trái</button>
         <button disabled={dis} onClick={() => cmd('justifyCenter')}>Giữa</button>
         <button disabled={dis} onClick={() => cmd('justifyRight')}>Phải</button>
+        <button disabled={dis} onClick={() => cmd('justifyFull')}>Đều</button>
+        <button disabled={dis} onClick={() => cmd('outdent')}>← Thụt</button>
+        <button disabled={dis} onClick={() => cmd('indent')}>Thụt →</button>
         <button disabled={dis} onClick={() => cmd('insertUnorderedList')}>Gạch đầu dòng</button>
         <button disabled={dis} onClick={() => cmd('insertOrderedList')}>Đánh số</button>
         <button disabled={dis} onClick={insertTable}>Chèn bảng</button>
+        <button disabled={dis} onClick={insertImage}>Chèn ảnh</button>
+        <button disabled={dis} onClick={promptLink}>Liên kết</button>
+        <button disabled={dis} onClick={() => cmd('unlink')}>Bỏ liên kết</button>
+        <button disabled={dis} onClick={() => cmd('insertHorizontalRule')}>Đường kẻ</button>
+        <button disabled={dis} onClick={() => cmd('subscript')}>X₂</button>
+        <button disabled={dis} onClick={() => cmd('superscript')}>X²</button>
         <button disabled={dis} onClick={() => cmd('removeFormat')}>Xóa định dạng</button>
         {notice && <span className="notice">{notice}</span>}
       </div>

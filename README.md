@@ -50,10 +50,10 @@ Tài khoản demo: admin / admin123, user1 đến user10 / user123.
 Ứng dụng không cần Document Server hoặc Docker:
 
 - Excel dùng lưới React nội bộ, công thức, định dạng, bảo vệ ô và cập nhật realtime.
-- Word dùng editor HTML dạng trang giấy, có ribbon và sanitization trước khi lưu.
+- Word dùng editor HTML dạng trang giấy, có ribbon với font/cỡ chữ, màu, căn lề, thụt dòng, danh sách, bảng tùy kích thước, ảnh, liên kết, chỉ số trên/dưới, đường kẻ và sanitization trước khi lưu.
 - PDF dùng PDF.js để render từng trang trên trình duyệt; file chỉ xem và được stream qua endpoint có kiểm tra quyền.
 
-Các editor dùng chung model quyền, nhật ký và lưu trữ mã hóa hiện tại. `.xlsx`, `.docx` và `.pdf` đều có thể tải lên từ trang quản trị.
+Excel dùng `fast-formula-parser` với nhóm hàm toán học, thống kê, logic, chuỗi, ngày giờ, kỹ thuật và tra cứu; nút `Hàm Excel…` chèn nhanh các hàm thông dụng và `fx Hàm` hiển thị danh sách gợi ý. Các editor dùng chung model quyền, nhật ký và lưu trữ mã hóa hiện tại. `.xlsx`, `.docx` và `.pdf` đều có thể tải lên từ trang quản trị.
 
 ## Mô hình lưu trữ và bảo mật
 
