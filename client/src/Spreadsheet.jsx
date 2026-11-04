@@ -74,6 +74,9 @@ export default function Spreadsheet({
   const [findText, setFindText] = useState('');
   const [showFind, setShowFind] = useState(false);
   const [officeTab, setOfficeTab] = useState('Home');
+  const [objectId, setObjectId] = useState(null);
+  const [insertDialog, setInsertDialog] = useState(null);
+  const pictureRef = useRef(null);
 
   const sel = {
     r1: Math.min(anchor.r, focus.r), r2: Math.max(anchor.r, focus.r),
@@ -223,6 +226,41 @@ export default function Spreadsheet({
     if (!activeOK) return;
     setEditing({ r: active.r, c: active.c, text: `=${name}()` });
     wrapRef.current?.focus();
+  };
+  const insertObject = (type, extra = {}) => {
+    if (!editable) return;
+    const object = {
+      id: `${type}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+      type, r: active.r, c: active.c, w: type === 'chart' ? 360 : 220, h: type === 'chart' ? 190 : 90, ...extra,
+    };
+    const objects = [...(data.objects || []), object];
+    setObjectId(object.id);
+    onChange({ ...data, objects });
+  };
+  const removeObject = () => {
+    if (!editable || !objectId) return;
+    onChange({ ...data, objects: (data.objects || []).filter((x) => x.id !== objectId) });
+    setObjectId(null);
+  };
+  const insertPicture = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !/^image\/(png|jpeg|gif|webp)$/.test(file.type) || file.size > 1_000_000) {
+      onBlocked?.('Ảnh phải là PNG, JPG, GIF hoặc WebP và nhỏ hơn 1 MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => insertObject('picture', { src: reader.result, w: 280, h: 180 });
+    reader.onerror = () => onBlocked?.('Không thể đọc ảnh.');
+    reader.readAsDataURL(file);
+  };
+  const confirmInsertDialog = () => {
+    if (!insertDialog) return;
+    if (insertDialog.type === 'hyperlink') {
+      if (!/^https?:\/\//i.test(insertDialog.value)) { onBlocked?.('Liên kết phải bắt đầu bằng http:// hoặc https://.'); return; }
+      insertObject('hyperlink', { title: 'Liên kết', url: insertDialog.value });
+    } else insertObject('symbol', { title: 'Ký hiệu', symbol: insertDialog.value.slice(0, 8) || 'Ω' });
+    setInsertDialog(null);
   };
 
   // ----- clipboard: user không thể copy dữ liệu ra ngoài ứng dụng -----
@@ -442,6 +480,20 @@ export default function Spreadsheet({
         <span className="office-search">⌕ <span>{officeTab === 'Formulas' ? 'Search formulas and functions' : 'Tell me what you want to do'}</span></span>
       </div>
       <div className="ribbon" onMouseDown={(e) => { if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') e.preventDefault(); }}>
+        {officeTab === 'Insert' ? (
+          <>
+            <button disabled={!editable} onClick={() => insertObject('table', { title: 'Bảng mới', text: 'Bảng dữ liệu' })} title="Chèn bảng">▦ Bảng</button>
+            <button disabled={!editable} onClick={() => insertObject('chart', { title: 'Biểu đồ mới', text: 'Chọn dữ liệu trong bảng để tạo biểu đồ' })} title="Chèn biểu đồ">▥ Biểu đồ</button>
+            <button disabled={!editable} onClick={() => insertObject('shape', { title: 'Hình chữ nhật', color: '#d9ead3' })} title="Chèn hình khối">◇ Hình khối</button>
+            <button disabled={!editable} onClick={() => insertObject('textbox', { title: 'Hộp văn bản', text: 'Nhập nội dung tại đây' })} title="Chèn hộp văn bản">T Hộp văn bản</button>
+            <button disabled={!editable} onClick={() => setInsertDialog({ type: 'hyperlink', value: 'https://' })} title="Chèn liên kết">🔗 Liên kết</button>
+            <button disabled={!editable} onClick={() => setInsertDialog({ type: 'symbol', value: 'Ω' })} title="Chèn ký hiệu">Ω Ký hiệu</button>
+            <button disabled={!editable} onClick={() => pictureRef.current?.click()} title="Chèn ảnh">▧ Ảnh</button>
+            <input ref={pictureRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden onChange={insertPicture} />
+            <button disabled={!editable || !objectId} onClick={removeObject} title="Xóa đối tượng đang chọn">Xóa đối tượng</button>
+            <span className="ribbon-group-label">Insert</span>
+          </>
+        ) : <>
         <button disabled={!editable || !undoS.current.length} onClick={doUndo} title="Hoàn tác (Ctrl+Z)">Hoàn tác</button>
         <button disabled={!editable || !redoS.current.length} onClick={doRedo} title="Làm lại (Ctrl+Y)">Làm lại</button>
         <span className="ribbon-group-label">Clipboard</span><span className="sep" />
@@ -489,7 +541,16 @@ export default function Spreadsheet({
           </>
         )}
         {notice && <span className="notice">{notice}</span>}
+        </>}
       </div>
+      {insertDialog && <div className="insert-dialog">
+        <b>{insertDialog.type === 'hyperlink' ? 'Địa chỉ liên kết' : 'Ký hiệu'}</b>
+        <input autoFocus value={insertDialog.value} onChange={(e) => setInsertDialog({ ...insertDialog, value: e.target.value })}
+          onKeyDown={(e) => { if (e.key === 'Enter') confirmInsertDialog(); if (e.key === 'Escape') setInsertDialog(null); }}
+          placeholder={insertDialog.type === 'hyperlink' ? 'https://example.com' : 'Ω'} />
+        <button className="primary" onClick={confirmInsertDialog}>Chèn</button>
+        <button onClick={() => setInsertDialog(null)}>Hủy</button>
+      </div>}
       {formulaHelp && <div className="formula-help">
         <b>Hàm Excel được hỗ trợ</b>
         <span>{FUNCTIONS.map(([name]) => name).join(' · ')}</span>
@@ -525,6 +586,18 @@ export default function Spreadsheet({
               ))}
             </div>
             {rowsOut}
+            {(data.objects || []).map((o) => {
+              const style = {
+                left: RN_W + (lefts[o.c] || 0), top: HEAD_H + o.r * ROWH,
+                width: o.w || 220, height: o.h || 90,
+              };
+              return (
+                <div key={o.id} className={`sheet-object sheet-object-${o.type}${objectId === o.id ? ' selected' : ''}`}
+                  style={{ ...style, background: o.color }} onMouseDown={(e) => { e.stopPropagation(); setObjectId(o.id); }}>
+                  {o.type === 'picture' && o.src ? <img src={o.src} alt={o.title || 'Ảnh'} /> : o.type === 'hyperlink' && o.url ? <a href={o.url} target="_blank" rel="noreferrer">{o.title || o.url}</a> : o.type === 'symbol' ? <b>{o.symbol}</b> : <><strong>{o.title}</strong><span>{o.text}</span></>}
+                </div>
+              );
+            })}
             {multi && <div className="selrange" style={rect(sel.r1, sel.r2, sel.c1, sel.c2)} />}
             <div className="activecell" style={rect(active.r, active.r, active.c, active.c)} />
             {rm && (

@@ -1,7 +1,7 @@
 // Lõi nghiệp vụ. MỌI thao tác (REST và WebSocket) đều đi qua đây nên quyền chỉ được kiểm tra ở 1 nơi.
 const EventEmitter = require('events');
 const store = require('./store');
-const { cleanCell, keyOK, cleanWidths, cleanDim, MAX_CELLS } = require('./excel');
+const { cleanCell, keyOK, cleanWidths, cleanDim, cleanObjects, MAX_CELLS } = require('./excel');
 
 const bus = new EventEmitter();
 const isAdmin = (u) => u.role === 'admin';
@@ -81,19 +81,25 @@ function applyEdit(user, id, msg, ip) {
     op = { html: msg.html };
     out.html = msg.html;
   } else {
-    const patch = cleanPatch(msg.patch);
-    if (!patch) throw E(400, 'Dữ liệu không hợp lệ');
-    if (!p.admin && it.protect.on) {
+    const hasPatch = msg.patch !== undefined;
+    const patch = hasPatch ? cleanPatch(msg.patch) : null;
+    if (hasPatch && !patch) throw E(400, 'Dữ liệu không hợp lệ');
+    if (patch && !p.admin && it.protect.on) {
       for (const k of Object.keys(patch)) if (!it.protect.cells[k]) throw E(403, 'Ô này đã bị khóa, bạn không được sửa');
     }
-    if (store.cellCount(it) + Object.keys(patch).length > MAX_CELLS) throw E(400, 'Quá nhiều ô');
-    op = { patch };
+    if (patch && store.cellCount(it) + Object.keys(patch).length > MAX_CELLS) throw E(400, 'Quá nhiều ô');
+    op = {};
+    if (patch) { op.patch = patch; out.patch = patch; }
     if (msg.dims) {
       op.dims = { rows: cleanDim(msg.dims.rows, it.data.rows), cols: cleanDim(msg.dims.cols, it.data.cols) };
       out.dims = op.dims;
     }
     if (msg.widths) { op.widths = cleanWidths(msg.widths); out.widths = op.widths; }
-    out.patch = patch;
+    if (msg.objects !== undefined) {
+      op.objects = cleanObjects(msg.objects);
+      if (!op.objects) throw E(400, 'Đối tượng chèn không hợp lệ');
+      out.objects = op.objects;
+    }
   }
   store.applyPatch(it, op, user.id); // ghi nhật ký thao tác ngay; khối dữ liệu được ghi gộp sau
   out.version = it.version;

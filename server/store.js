@@ -208,7 +208,7 @@ function entry(it) {
     const r = P('SELECT data FROM chunks WHERE item_id=? AND chunk=0').get(it.id);
     data = r ? unpack(dekOf(it.bookId), r.data, `chunk:${it.id}:0`) : { pdf: '' };
   } else {
-    data = { rows: 100, cols: 26, colWidths: {}, cells: {} };
+    data = { rows: 100, cols: 26, colWidths: {}, cells: {}, objects: [] };
     for (const r of P('SELECT chunk, data FROM chunks WHERE item_id=?').all(it.id)) {
       const o = unpack(dek, r.data, `chunk:${it.id}:${r.chunk}`);
       if (r.chunk === -1) Object.assign(data, o); else Object.assign(data.cells, o);
@@ -226,7 +226,7 @@ function writeAll(it, data) { // ghi toàn bộ dữ liệu (khi tạo mới ho�
   if (it.type === 'word') P('INSERT INTO chunks VALUES(?,?,?)').run(it.id, 0, pack(dek, { html: data.html }, `chunk:${it.id}:0`));
   else if (it.type === 'pdf') P('INSERT INTO chunks VALUES(?,?,?)').run(it.id, 0, pack(dek, { pdf: data.pdf }, `chunk:${it.id}:0`));
   else {
-    P('INSERT INTO chunks VALUES(?,?,?)').run(it.id, -1, pack(dek, { rows: data.rows, cols: data.cols, colWidths: data.colWidths }, `chunk:${it.id}:-1`));
+    P('INSERT INTO chunks VALUES(?,?,?)').run(it.id, -1, pack(dek, { rows: data.rows, cols: data.cols, colWidths: data.colWidths, objects: data.objects || [] }, `chunk:${it.id}:-1`));
     const by = new Map();
     for (const k in data.cells) { const c = chunkOf(k); if (!by.has(c)) by.set(c, {}); by.get(c)[k] = data.cells[k]; }
     for (const [c, o] of by) P('INSERT INTO chunks VALUES(?,?,?)').run(it.id, c, pack(dek, o, `chunk:${it.id}:${c}`));
@@ -264,6 +264,7 @@ function applyToEntry(it, e, op) {
   }
   if (op.dims) { d.rows = op.dims.rows; d.cols = op.dims.cols; e.layout = true; }
   if (op.widths) { d.colWidths = { ...d.colWidths, ...op.widths }; e.layout = true; }
+  if (op.objects) { d.objects = op.objects; e.layout = true; }
 }
 function applyPatch(it, op, userId) {
   const e = entry(it);
@@ -291,7 +292,7 @@ function flush() {
           for (const k of e.idx.get(c) || []) o[k] = e.data.cells[k];
           P('INSERT OR REPLACE INTO chunks VALUES(?,?,?)').run(id, c, pack(dek, o, `chunk:${id}:${c}`));
         }
-        if (e.layout) P('INSERT OR REPLACE INTO chunks VALUES(?,?,?)').run(id, -1, pack(dek, { rows: e.data.rows, cols: e.data.cols, colWidths: e.data.colWidths }, `chunk:${id}:-1`));
+        if (e.layout) P('INSERT OR REPLACE INTO chunks VALUES(?,?,?)').run(id, -1, pack(dek, { rows: e.data.rows, cols: e.data.cols, colWidths: e.data.colWidths, objects: e.data.objects || [] }, `chunk:${id}:-1`));
       }
       it.flushed = it.version;
       P('UPDATE items SET version=?, flushed=?, updated_at=? WHERE id=?').run(it.version, it.flushed, it.updatedAt, id);

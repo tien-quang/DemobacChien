@@ -10,7 +10,8 @@ export function diffGrid(prev, next) {
   const widths = {};
   for (const k in next.colWidths || {}) if ((prev.colWidths || {})[k] !== next.colWidths[k]) widths[k] = next.colWidths[k];
   if (Object.keys(widths).length) out.widths = widths;
-  return n || out.dims || out.widths ? out : null;
+  if (JSON.stringify(prev.objects || []) !== JSON.stringify(next.objects || [])) out.objects = next.objects || [];
+  return n || out.dims || out.widths || out.objects ? out : null;
 }
 
 export function applyPatch(data, msg) {
@@ -22,5 +23,6 @@ export function applyPatch(data, msg) {
   }
   if (msg.dims) { out.rows = msg.dims.rows; out.cols = msg.dims.cols; }
   if (msg.widths) out.colWidths = { ...data.colWidths, ...msg.widths };
+  if (msg.objects) out.objects = msg.objects;
   return out;
 }

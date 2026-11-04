@@ -6,6 +6,7 @@ const ExcelJS = require('exceljs');
 const MAX_ROWS = 2000;
 const MAX_COLS = 60;
 const MAX_CELLS = 200000;
+const MAX_OBJECTS = 500;
 
 const argb = (c) => (c && typeof c.argb === 'string' && c.argb.length === 8 ? '#' + c.argb.slice(2).toLowerCase() : undefined);
 const toSerial = (d) => d.getTime() / 86400000 + 25569;
@@ -154,6 +155,24 @@ const cleanWidths = (w) => {
   return out;
 };
 const cleanDim = (n, def) => (Number.isInteger(n) && n > 0 && n <= 5000 ? n : def);
+const cleanObjects = (objects) => {
+  if (!Array.isArray(objects) || objects.length > MAX_OBJECTS) return null;
+  const allowed = new Set(['table', 'chart', 'shape', 'textbox', 'hyperlink', 'symbol', 'picture']);
+  const out = [];
+  for (const x of objects) {
+    if (!x || typeof x !== 'object' || !allowed.has(x.type) || typeof x.id !== 'string' || !/^[a-z0-9-]{1,80}$/i.test(x.id)) return null;
+    if (!Number.isInteger(x.r) || !Number.isInteger(x.c) || x.r < 0 || x.r >= 5000 || x.c < 0 || x.c >= 200) return null;
+    const o = { id: x.id, type: x.type, r: x.r, c: x.c, w: Math.max(60, Math.min(1200, Number(x.w) || 220)), h: Math.max(30, Math.min(800, Number(x.h) || 100)) };
+    if (typeof x.title === 'string') o.title = x.title.slice(0, 200);
+    if (typeof x.text === 'string') o.text = x.text.slice(0, 5000);
+    if (typeof x.url === 'string' && /^https?:\/\//i.test(x.url)) o.url = x.url.slice(0, 1000);
+    if (typeof x.symbol === 'string') o.symbol = x.symbol.slice(0, 8);
+    if (typeof x.src === 'string' && /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=]+$/i.test(x.src) && x.src.length <= 1_500_000) o.src = x.src;
+    if (x.color && COLOR.test(x.color)) o.color = x.color.toLowerCase();
+    out.push(o);
+  }
+  return out;
+};
 
 function cleanGrid(d) {
   if (!d || typeof d !== 'object' || typeof d.cells !== 'object' || d.cells === null) return null;
@@ -169,4 +188,4 @@ function cleanGrid(d) {
   return { rows: cleanDim(d.rows, 100), cols: cleanDim(d.cols, 26), colWidths: cleanWidths(d.colWidths), cells };
 }
 
-module.exports = { parseXlsx, exportXlsx, cleanGrid, cleanCell, keyOK, cleanWidths, cleanDim, MAX_CELLS };
+module.exports = { parseXlsx, exportXlsx, cleanGrid, cleanCell, keyOK, cleanWidths, cleanDim, cleanObjects, MAX_CELLS };
