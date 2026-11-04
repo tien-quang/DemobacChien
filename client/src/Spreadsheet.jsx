@@ -73,6 +73,7 @@ export default function Spreadsheet({
   const [zoom, setZoom] = useState(100);
   const [findText, setFindText] = useState('');
   const [showFind, setShowFind] = useState(false);
+  const [officeTab, setOfficeTab] = useState('Home');
 
   const sel = {
     r1: Math.min(anchor.r, focus.r), r2: Math.max(anchor.r, focus.r),
@@ -437,7 +438,8 @@ export default function Spreadsheet({
         <div className="office-window-actions"><button>−</button><button>□</button><button>×</button></div>
       </div>
       <div className="office-tabs">
-        <button className="active">Home</button><button>Insert</button><button>Page Layout</button><button>Formulas</button><button>Data</button><button>Review</button><button>View</button><span className="office-search">⌕ <span>Tell me what you want to do</span></span>
+        {['Home', 'Insert', 'Page Layout', 'Formulas', 'Data', 'Review', 'View'].map((tab) => <button key={tab} className={officeTab === tab ? 'active' : ''} onClick={() => setOfficeTab(tab)}>{tab}</button>)}
+        <span className="office-search">⌕ <span>{officeTab === 'Formulas' ? 'Search formulas and functions' : 'Tell me what you want to do'}</span></span>
       </div>
       <div className="ribbon" onMouseDown={(e) => { if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') e.preventDefault(); }}>
         <button disabled={!editable || !undoS.current.length} onClick={doUndo} title="Hoàn tác (Ctrl+Z)">Hoàn tác</button>

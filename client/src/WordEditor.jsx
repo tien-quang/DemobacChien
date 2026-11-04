@@ -8,6 +8,7 @@ export default function WordEditor({ html, editable, restricted, watermark, noti
   const ref = useRef(null);
   const timer = useRef(null);
   const [words, setWords] = useState(0);
+  const [officeTab, setOfficeTab] = useState('Home');
 
   const countWords = () => {
     const t = (ref.current?.innerText || '').trim();
@@ -81,7 +82,8 @@ export default function WordEditor({ html, editable, restricted, watermark, noti
         <div className="office-window-actions"><button>−</button><button>□</button><button>×</button></div>
       </div>
       <div className="office-tabs word-tabs">
-        <button className="active">Home</button><button>Insert</button><button>Page Layout</button><button>References</button><button>Review</button><button>View</button><span className="office-search">⌕ <span>Tell me what you want to do</span></span>
+        {['Home', 'Insert', 'Page Layout', 'References', 'Review', 'View'].map((tab) => <button key={tab} className={officeTab === tab ? 'active' : ''} onClick={() => setOfficeTab(tab)}>{tab}</button>)}
+        <span className="office-search">⌕ <span>{officeTab === 'References' ? 'Search references and citations' : 'Tell me what you want to do'}</span></span>
       </div>
       <div className="ribbon" onMouseDown={keep}>
         <span className="ribbon-group-label">Clipboard</span>
