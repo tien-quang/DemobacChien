@@ -33,12 +33,30 @@ function getReadable(user, id, ip) {
 }
 
 // ---------- hình dạng dữ liệu gửi ra ngoài ----------
+// Quyền ô gửi ra ngoài. rev tăng mỗi lần admin đổi khóa/ẩn: trang của user dựa vào đó để nạp lại bảng tính. Chỉ admin mới biết số ô ẩn.
+function protectView(it, admin) {
+  const v = it.protect.on ? { on: true, cells: it.protect.cells } : { on: false, cells: {} };
+  v.rev = it.protect.rev || 0;
+  if (admin) v.hidden = Object.keys(it.protect.hidden || {}).length;
+  return v;
+}
+const hiddenKeys = (it) => Object.keys((it.protect && it.protect.hidden) || {});
+// Dữ liệu ô mà người này được thấy: ô ẩn bị gỡ nội dung (giữ định dạng) với mọi người không phải admin
+function dataFor(user, it) {
+  if (isAdmin(user) || it.type !== 'excel') return it.data;
+  const hid = hiddenKeys(it);
+  if (!hid.length) return it.data;
+  const cells = { ...it.data.cells };
+  for (const k of hid) { const c = cells[k]; if (c) { if (c.s) cells[k] = { s: c.s }; else delete cells[k]; } }
+  return { ...it.data, cells };
+}
+
 function userView(it, user) {
   const p = perm(user, it);
   return {
     id: it.id, name: it.name, type: it.type, status: it.status, editable: p.edit, pastDue: p.pastDue,
     deadline: it.deadline, submittedAt: it.submittedAt, approvedAt: it.approvedAt, returnNote: it.returnNote, version: it.version,
-    protect: it.protect.on ? { on: true, cells: it.protect.cells } : { on: false, cells: {} },
+    protect: protectView(it),
   }; // KHÔNG có bookId, tên workbook lớn hay thông tin workbook khác
 }
 function adminView(it) {
@@ -47,7 +65,7 @@ function adminView(it) {
     id: it.id, bookId: it.bookId, name: it.name, type: it.type, status: it.status, editable: true,
     assigneeId: it.assigneeId, assigneeName: a ? a.name : null,
     submittedAt: it.submittedAt, approvedAt: it.approvedAt, returnNote: it.returnNote, submitHash: it.submitHash, updatedAt: it.updatedAt, version: it.version,
-    deadline: it.deadline, protectOn: it.protect.on, protectCount: Object.keys(it.protect.cells).length,
+    deadline: it.deadline, protectOn: it.protect.on, protectCount: Object.keys(it.protect.cells).length, hiddenCount: hiddenKeys(it).length,
     pastDue: !!(it.deadline && Date.now() > Date.parse(it.deadline)),
   };
 }
@@ -82,6 +100,10 @@ function applyEdit(user, id, msg, ip) {
   } else {
     const patch = cleanPatch(msg.patch);
     if (!patch) throw E(400, 'Dữ liệu không hợp lệ');
+    if (!p.admin) {
+      const hid = it.protect.hidden || {};
+      for (const k of Object.keys(patch)) if (hid[k]) throw E(403, 'Ô này đã bị ẩn, bạn không được sửa');
+    }
     if (!p.admin && it.protect.on) {
       for (const k of Object.keys(patch)) if (!it.protect.cells[k]) throw E(403, 'Ô này đã bị khóa, bạn không được sửa');
     }
@@ -227,13 +249,21 @@ function setProtect(user, id, body, ip) {
     list.forEach((k) => { if (val) cells[k] = 1; else delete cells[k]; });
   }
   it.protect.cells = cells;
+  const hidden = { ...(it.protect.hidden || {}) };
+  for (const [list, val] of [[body.hide, true], [body.show, false]]) {
+    if (list === undefined) continue;
+    if (!Array.isArray(list) || list.length > 60000 || !list.every((k) => typeof k === 'string' && keyOK(k))) throw E(400, 'Danh sách ô không hợp lệ');
+    list.forEach((k) => { if (val) hidden[k] = 1; else delete hidden[k]; });
+  }
+  it.protect.hidden = hidden;
+  it.protect.rev = (it.protect.rev || 0) + 1;
   store.saveItem(it, true);
-  store.audit(user.id, 'protect', it.id, ip, { on: it.protect.on, n: Object.keys(cells).length });
+  store.audit(user.id, 'protect', it.id, ip, { on: it.protect.on, n: Object.keys(cells).length, hidden: Object.keys(hidden).length });
   bus.emit('protect', { item: it });
-  return it.protect;
+  return protectView(it, true);
 }
 
 module.exports = {
-  bus, HttpError, E, perm, isAdmin, getReadable, userView, adminView,
+  bus, HttpError, E, perm, isAdmin, getReadable, userView, adminView, protectView, hiddenKeys, dataFor,
   applyEdit, markOpened, submit, approve, reopen, verify, FINAL, assign, setProtect, emitStatus,
 };

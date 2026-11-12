@@ -1,0 +1,26 @@
+# ONLYOFFICE Docs Community Edition (miễn phí, giới hạn 20 kết nối đồng thời theo giấy phép của hãng).
+# Chạy:  docker compose up -d     (lần đầu mất 1-2 phút để Document Server khởi động)
+# Cần quy mô lớn hơn thì mua giấy phép ONLYOFFICE Docs Developer/Enterprise rồi đặt file license vào /var/www/onlyoffice/Data,
+# code ứng dụng giữ nguyên.
+services:
+  onlyoffice:
+    image: onlyoffice/documentserver:latest
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    environment:
+      JWT_ENABLED: "true"
+      JWT_SECRET: "${ONLYOFFICE_JWT_SECRET:?Đặt ONLYOFFICE_JWT_SECRET trong file .env}"
+      JWT_HEADER: "Authorization"
+      JWT_IN_BODY: "true"
+      # Document Server phải gọi được về ứng dụng (địa chỉ nội bộ/localhost) để tải file và gửi callback
+      ALLOW_PRIVATE_IP_ADDRESS: "true"
+      ALLOW_META_IP_ADDRESS: "true"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Linux; Docker Desktop (Windows/Mac) đã có sẵn
+    volumes:
+      - oo_data:/var/www/onlyoffice/Data
+      - oo_logs:/var/log/onlyoffice
+volumes:
+  oo_data:
+  oo_logs:

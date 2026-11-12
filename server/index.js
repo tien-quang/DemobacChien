@@ -16,6 +16,7 @@ const { samples } = require('./sample');
 const { colName } = require('./refs');
 const { materialize } = require('./formula');
 const { safeHtmlForDocx } = require('./docsafe');
+const oo = require('./onlyoffice');
 
 const PORT = process.env.PORT || 4000;
 const app = express();
@@ -38,6 +39,9 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: '2mb' }));
+
+// ---------- ONLYOFFICE: Document Server gọi vào đây bằng liên kết ký sẵn + JWT (không có cookie phiên) ----------
+oo.mount(app);
 
 // ---------- chống CSRF: cookie SameSite=Strict + kiểm tra Origin cho mọi request ghi ----------
 app.use('/api', (req, res, next) => {
@@ -356,16 +360,38 @@ app.get('/api/my-items', (req, res) => {
   const mine = [...store.items.values()].filter((i) => i.assigneeId === req.user.id);
   res.json(mine.map((i) => { const v = core.userView(i, req.user); return { id: v.id, name: v.name, type: v.type, status: v.status, editable: v.editable, deadline: v.deadline, pastDue: v.pastDue, returnNote: v.returnNote }; }));
 });
+app.get('/api/onlyoffice/status', (req, res) => res.json({ enabled: oo.enabled() }));
+app.get('/api/items/:id/onlyoffice', async (req, res, next) => {
+  try {
+    if (!oo.enabled()) throw E(404, 'ONLYOFFICE chưa được cấu hình');
+    const r = await oo.editorConfig(req.user, req.params.id, ipOf(req), `${req.protocol}://${req.get('host')}`, { watch: req.query.watch === '1' });
+    core.markOpened(req.user, core.getReadable(req.user, req.params.id, ipOf(req)));
+    A(req, 'open', req.params.id);
+    res.json(r);
+  } catch (e) { next(e); }
+});
+app.post('/api/items/:id/onlyoffice/flush', async (req, res, next) => { // ép ONLYOFFICE lưu phần chưa lưu (dùng khi admin đổi giao diện)
+  try {
+    const cur = core.getReadable(req.user, req.params.id, ipOf(req));
+    if ((cur.type === 'word' || cur.type === 'excel') && core.perm(req.user, cur).edit) await oo.flush(cur);
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
 app.get('/api/items/:id', (req, res) => {
   const it = core.getReadable(req.user, req.params.id, ipOf(req));
   core.markOpened(req.user, it);
   A(req, 'open', it.id);
   const view = core.userView(it, req.user);
-  res.json({ item: core.isAdmin(req.user) ? { ...view, ...core.adminView(it) } : view, data: it.data });
+  res.json({ item: core.isAdmin(req.user) ? { ...view, ...core.adminView(it) } : view, data: core.dataFor(req.user, it) }); // ô ẩn bị gỡ nội dung với user
 });
-app.post('/api/items/:id/submit', (req, res) => {
-  const it = core.submit(req.user, req.params.id, ipOf(req));
-  res.json({ ok: true, submittedAt: it.submittedAt });
+app.post('/api/items/:id/submit', async (req, res, next) => {
+  try {
+    // Văn bản mở bằng ONLYOFFICE: ép lưu phần chưa lưu trước khi chốt bản nộp (core.submit vẫn kiểm tra quyền như cũ)
+    const cur = core.getReadable(req.user, req.params.id, ipOf(req));
+    if ((cur.type === 'word' || cur.type === 'excel') && core.perm(req.user, cur).edit) await oo.flush(cur);
+    const it = core.submit(req.user, req.params.id, ipOf(req));
+    res.json({ ok: true, submittedAt: it.submittedAt });
+  } catch (e) { next(e); }
 });
 app.post('/api/items/:id/approve', adminOnly, (req, res) => { core.approve(req.user, req.params.id, ipOf(req)); res.json({ ok: true }); });
 app.post('/api/items/:id/reopen', adminOnly, (req, res) => { core.reopen(req.user, req.params.id, req.body?.reason, ipOf(req)); res.json({ ok: true }); });
@@ -393,7 +419,9 @@ app.delete('/api/items/:id', adminOnly, (req, res) => {
 app.get('/api/items/:id/export', adminOnly, async (req, res) => {
   const it = core.getReadable(req.user, req.params.id, ipOf(req));
   let buf, ext, mime;
-  if (it.type === 'excel') { buf = Buffer.from(await exportXlsx({ parts: [{ name: it.name.slice(0, 31), data: materialize(it.data, it.name, {}) }] })); ext = 'xlsx'; mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'; }
+  const kept = oo.origFile(it); // file gốc do ONLYOFFICE lưu (đủ định dạng Office) nếu còn khớp dữ liệu
+  if (kept) { buf = kept; ext = it.type === 'excel' ? 'xlsx' : 'docx'; mime = it.type === 'excel' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'; }
+  else if (it.type === 'excel') { buf = Buffer.from(await exportXlsx({ parts: [{ name: it.name.slice(0, 31), data: materialize(it.data, it.name, {}) }] })); ext = 'xlsx'; mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'; }
   else { buf = Buffer.from(await HTMLtoDOCX('<html><body>' + safeHtmlForDocx(it.data.html) + '</body></html>')); ext = 'docx'; mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'; }
   A(req, 'export_item', it.id);
   res.set({ 'Content-Type': mime, 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(it.name)}.${ext}` });
@@ -406,7 +434,8 @@ app.use('/api', (req, res) => res.status(404).json({ error: 'Không tìm thấy'
 const DIST = path.join(__dirname, '..', 'client', 'dist');
 if (fs.existsSync(DIST)) {
   app.use((req, res, next) => {
-    res.set('Content-Security-Policy', "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+    const ooHost = oo.enabled() ? ' ' + oo.CFG.url : '';
+    res.set('Content-Security-Policy', `default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'${ooHost}; frame-src 'self'${ooHost}; connect-src 'self' ws: wss:${ooHost}; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`);
     next();
   });
   app.use(express.static(DIST));

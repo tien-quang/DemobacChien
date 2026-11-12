@@ -56,9 +56,8 @@ module.exports = function attach(server) {
     }
   });
   core.bus.on('protect', ({ item }) => {
-    const p = { on: item.protect.on, cells: item.protect.cells };
-    toAdmins(item.bookId, { t: 'protect', item: item.id, protect: p });
-    if (item.assigneeId) toUser(item.assigneeId, { t: 'protect', item: item.id, protect: p });
+    toAdmins(item.bookId, { t: 'protect', item: item.id, protect: core.protectView(item, true) });
+    if (item.assigneeId) toUser(item.assigneeId, { t: 'protect', item: item.id, protect: core.protectView(item) });
   });
   core.bus.on('book', ({ bookId }) => toAdmins(bookId, { t: 'book', book: bookId }));
   core.bus.on('consolidation', ({ bookId, c }) => toAdmins(bookId, { t: 'consolidation', book: bookId, n: c.n, id: c.id }));

@@ -4,7 +4,7 @@ import { live } from './live.js';
 import { diffGrid, applyPatch } from './diff.js';
 import { go, fmt, useLive, useToast, ConnDot, Modal, STATUS, deadlineText } from './util.jsx';
 import Spreadsheet from './Spreadsheet.jsx';
-import WordEditor from './WordEditor.jsx';
+import WordPane, { SheetPane } from './OnlyOfficeEditor.jsx';
 import Consolidation from './Consolidation.jsx';
 
 const toLocalInput = (iso) => {
@@ -250,14 +250,16 @@ export default function BookPage({ me, id }) {
         ) : active === 'consol' ? (
           <Consolidation bookId={book.id} flash={flash} />
         ) : !it || !d ? <p className="wrap muted">Đang tải…</p> : it.type === 'excel' ? (
-          <Spreadsheet
-            key={it.id} sheetName={it.name} data={d.data} others={others} editable={editable} restricted={false}
-            protect={d.protect} remote={online.has(it.id) ? cursors[it.id] : null} flash={flashes[it.id]} notice={notice}
-            protectUI={{ on: d.protect.on, onToggle: (on) => protectCall({ on }), onAllow: (keys) => protectCall({ allow: keys }), onDeny: (keys) => protectCall({ deny: keys }) }}
-            onChange={onSheet}
-          />
+          <SheetPane key={it.id} id={it.id} editable={editable} notice={notice} admin protect={d.protect} assigned={!!it.assigneeId}>
+            <Spreadsheet
+              key={it.id} sheetName={it.name} data={d.data} others={others} editable={editable} restricted={false}
+              protect={d.protect} remote={online.has(it.id) ? cursors[it.id] : null} flash={flashes[it.id]} notice={notice}
+              protectUI={{ on: d.protect.on, onToggle: (on) => protectCall({ on }), onAllow: (keys) => protectCall({ allow: keys }), onDeny: (keys) => protectCall({ deny: keys }) }}
+              onChange={onSheet}
+            />
+          </SheetPane>
         ) : (
-          <WordEditor key={it.id} html={d.data.html} editable={editable} restricted={false} notice={notice} onChange={onWord} />
+          <WordPane key={it.id} id={it.id} html={d.data.html} editable={editable} restricted={false} notice={notice} onChange={onWord} />
         )}
       </div>
 

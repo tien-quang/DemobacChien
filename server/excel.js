@@ -91,7 +91,7 @@ async function parseXlsx(buffer) {
 async function exportXlsx(doc) {
   const wb = new ExcelJS.Workbook();
   wb.calcProperties.fullCalcOnLoad = true; // Excel tự tính lại công thức khi mở
-  doc.parts.forEach((p) => {
+  for (const p of doc.parts) {
     const ws = wb.addWorksheet(p.name.replace(/[\\/?*[\]:]/g, '-').slice(0, 31) || 'Sheet');
     const d = p.data;
     Object.entries(d.colWidths || {}).forEach(([c, px]) => { ws.getColumn(Number(c) + 1).width = Math.max(1, (px - 5) / 7); });
@@ -113,7 +113,16 @@ async function exportXlsx(doc) {
         if (s.nf) x.numFmt = s.nf;
       }
     });
-  });
+    // Bảo vệ sheet kiểu Excel (ONLYOFFICE chặn sửa ô khóa ngay trên giao diện): mọi ô khóa, trừ các ô trong protect.unlock.
+    // Mật khẩu ngẫu nhiên của máy chủ: user không có mật khẩu nên không bỏ bảo vệ được.
+    if (p.protect) {
+      for (const k of p.protect.unlock || []) {
+        const [r, c] = k.split(',').map(Number);
+        ws.getCell(r + 1, c + 1).protection = { locked: false };
+      }
+      await ws.protect(p.protect.password, { spinCount: 10000 });
+    }
+  }
   return wb.xlsx.writeBuffer();
 }
 

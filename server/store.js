@@ -208,6 +208,7 @@ function entry(it) {
     data = { rows: 100, cols: 26, colWidths: {}, cells: {} };
     for (const r of P('SELECT chunk, data FROM chunks WHERE item_id=?').all(it.id)) {
       const o = unpack(dek, r.data, `chunk:${it.id}:${r.chunk}`);
+      if (r.chunk === -2) continue; // file gốc ONLYOFFICE (xem getOrig), không phải dữ liệu ô
       if (r.chunk === -1) Object.assign(data, o); else Object.assign(data.cells, o);
     }
   }
@@ -219,6 +220,7 @@ const dataKeepAlive = (it) => entry(it);
 
 function writeAll(it, data) { // ghi toàn bộ dữ liệu (khi tạo mới hoặc thay thế)
   const dek = dekOf(it.bookId);
+  const oldOrig = getOrig(it); if (oldOrig) deleteBlob(oldOrig.key);
   P('DELETE FROM chunks WHERE item_id=?').run(it.id);
   if (it.type === 'word') P('INSERT INTO chunks VALUES(?,?,?)').run(it.id, 0, pack(dek, { html: data.html }, `chunk:${it.id}:0`));
   else {
@@ -317,6 +319,7 @@ function flush() {
 function deleteItem(id) {
   const it = items.get(id); if (!it) return;
   const b = books.get(it.bookId);
+  const oldOrig = getOrig(it); if (oldOrig) deleteBlob(oldOrig.key);
   tx(() => { for (const t of ['chunks', 'ops', 'snapshots']) P(`DELETE FROM ${t} WHERE item_id=?`).run(id); P('DELETE FROM items WHERE id=?').run(id); });
   if (b) b.itemIds = b.itemIds.filter((x) => x !== id);
   items.delete(id); cache.delete(id);
@@ -354,6 +357,20 @@ function putBlob(bookId, buf) {
 }
 const getBlob = (bookId, key) => open(dekOf(bookId), fs.readFileSync(blobPath(key)), 'blob:' + key);
 function deleteBlob(key) { try { fs.unlinkSync(blobPath(key)); } catch { /* đã xóa */ } }
+
+// File gốc (.docx/.xlsx) mà ONLYOFFICE gửi về, giữ nguyên từng byte (mã hóa như mọi blob) để mở lại không mất định dạng Office
+// (đầu trang, mục lục, biểu đồ, ô gộp...). Dữ liệu chính (html / ô) vẫn là nguồn sự thật: file gốc chỉ dùng khi dấu vân tay h
+// của dữ liệu hiện tại còn khớp lúc lưu; ai đổi dữ liệu bằng đường khác thì h lệch và hệ thống tự dựng lại file từ dữ liệu.
+function getOrig(it) {
+  const r = P('SELECT data FROM chunks WHERE item_id=? AND chunk=-2').get(it.id);
+  return r ? unpack(dekOf(it.bookId), r.data, `chunk:${it.id}:-2`) : null;
+}
+function setOrig(it, buf, h) {
+  const old = getOrig(it);
+  const key = putBlob(it.bookId, buf);
+  P('INSERT OR REPLACE INTO chunks VALUES(?,?,?)').run(it.id, -2, pack(dekOf(it.bookId), { key, h }, `chunk:${it.id}:-2`));
+  if (old) deleteBlob(old.key);
+}
 
 // ---------- bản tổng hợp workbook lớn (bất biến, có phiên bản) ----------
 function addConsolidation(c) {
@@ -417,6 +434,6 @@ module.exports = {
   user: (id) => meta.users.find((u) => u.id === id) || null,
   findUser: (n) => meta.users.find((u) => u.username === n) || null,
   createSnapshot, getSnapshot, snapshotByHash, latestSubmitSnapshot,
-  putBlob, getBlob, deleteBlob, addConsolidation, listConsolidations, getConsolidation,
+  putBlob, getBlob, deleteBlob, getOrig, setOrig, addConsolidation, listConsolidations, getConsolidation,
   enqueueJob, claimJob, finishJob, failJob, jobState, countJobs, rotateMasterKey, keySource: () => keySource, CH,
 };
