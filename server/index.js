@@ -26,7 +26,7 @@ const { E } = core;
 const SLOT = (req) => req.headers['x-session-slot'];
 
 app.disable('x-powered-by');
-if (process.env.TRUST_PROXY === '1') app.set('trust proxy', 1);
+if (process.env.TRUST_PROXY === '1' || process.env.RENDER) app.set('trust proxy', 1); // SỬA: Render đặt proxy HTTPS phía trước, cần tin proxy để req.protocol/req.ip đúng
 const ipOf = (req) => req.ip;
 
 // ---------- header bảo mật ----------
@@ -364,7 +364,8 @@ app.get('/api/onlyoffice/status', (req, res) => res.json({ enabled: oo.enabled()
 app.get('/api/items/:id/onlyoffice', async (req, res, next) => {
   try {
     if (!oo.enabled()) throw E(404, 'ONLYOFFICE chưa được cấu hình');
-    const r = await oo.editorConfig(req.user, req.params.id, ipOf(req), `${req.protocol}://${req.get('host')}`, { watch: req.query.watch === '1' });
+    // SỬA: dùng ONLYOFFICE_APP_URL (https) thay cho `${req.protocol}://${req.get('host')}` để plugin không bị chặn Mixed Content trên Render
+    const r = await oo.editorConfig(req.user, req.params.id, ipOf(req), oo.CFG.appUrl, { watch: req.query.watch === '1' });
     core.markOpened(req.user, core.getReadable(req.user, req.params.id, ipOf(req)));
     A(req, 'open', req.params.id);
     res.json(r);
