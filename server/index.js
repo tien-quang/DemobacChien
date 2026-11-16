@@ -364,8 +364,8 @@ app.get('/api/onlyoffice/status', (req, res) => res.json({ enabled: oo.enabled()
 app.get('/api/items/:id/onlyoffice', async (req, res, next) => {
   try {
     if (!oo.enabled()) throw E(404, 'ONLYOFFICE chưa được cấu hình');
-    // SỬA: dùng ONLYOFFICE_APP_URL (https) thay cho `${req.protocol}://${req.get('host')}` để plugin không bị chặn Mixed Content trên Render
-    const r = await oo.editorConfig(req.user, req.params.id, ipOf(req), oo.CFG.appUrl, { watch: req.query.watch === '1' });
+    // URL này dành cho trình duyệt tải plugin; các liên kết file/callback bên trong vẫn dùng ONLYOFFICE_APP_URL.
+    const r = await oo.editorConfig(req.user, req.params.id, ipOf(req), `${req.protocol}://${req.get('host')}`, { watch: req.query.watch === '1' });
     core.markOpened(req.user, core.getReadable(req.user, req.params.id, ipOf(req)));
     A(req, 'open', req.params.id);
     res.json(r);

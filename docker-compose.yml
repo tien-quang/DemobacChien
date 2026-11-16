@@ -7,7 +7,7 @@ services:
     image: onlyoffice/documentserver:latest
     restart: unless-stopped
     ports:
-      - "8081:80"
+      - "8082:80"
     environment:
       JWT_ENABLED: "true"
       JWT_SECRET: "${ONLYOFFICE_JWT_SECRET:?Đặt ONLYOFFICE_JWT_SECRET trong file .env}"

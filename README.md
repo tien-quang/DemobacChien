@@ -51,7 +51,7 @@ Mặc định văn bản Word dùng trình soạn thảo đơn giản trong trì
 mở bằng ONLYOFFICE Docs (giao diện giống Word: định dạng, bảng, ảnh, mục lục...). Không đặt thì mọi thứ chạy như cũ.
 
     cp .env.example .env            # sửa ONLYOFFICE_JWT_SECRET thành chuỗi ngẫu nhiên dài
-    docker compose --env-file .env up -d      # Document Server tại http://localhost:8080
+    docker compose --env-file .env up -d      # Document Server tại http://localhost:8082
     # nạp biến môi trường rồi chạy ứng dụng, ví dụ (Linux/Mac):
     set -a; . ./.env; set +a; npm start
     # Windows PowerShell: đặt $env:ONLYOFFICE_URL=...; $env:ONLYOFFICE_APP_URL=...; $env:ONLYOFFICE_JWT_SECRET=...; npm start
@@ -62,7 +62,7 @@ nên quyền sửa, hạn nộp, trạng thái đã nộp, nhật ký thao tác 
 
 - Bản Community giới hạn 20 kết nối đồng thời theo giấy phép của hãng. Cần nhiều hơn thì mua giấy phép Developer/Enterprise; code không đổi.
 - Vì lưu lại dưới dạng HTML nên một số định dạng nâng cao của Word (phông riêng, mục lục, chú thích, đầu trang/chân trang) có thể mất khi lưu. Đây là giới hạn của mô hình dữ liệu HTML hiện tại.
-- Production: đặt cả ứng dụng và Document Server sau HTTPS, dùng JWT secret riêng, không mở cổng 8080 ra Internet nếu không cần.
+- Production: đặt cả ứng dụng và Document Server sau HTTPS, dùng JWT secret riêng, không mở cổng 8082 ra Internet nếu không cần.
 - Kiểm thử: `npm run test:oo` (34 kiểm tra với Document Server giả: JWT, liên kết ký sẵn, chống SSRF, quyền sau khi nộp, ép lưu khi nộp).
 
 ## Excel bằng ONLYOFFICE (user)

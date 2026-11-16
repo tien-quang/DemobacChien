@@ -341,7 +341,7 @@ async function editorConfig(user, itemId, ip, appOrigin, opts = {}) {
     },
   };
   // Admin sửa Excel: nạp plugin tab "Quản trị ô" (cho phép nhập / khóa / ẩn ô ngay trong ribbon). Trình duyệt tải plugin từ chính máy chủ này.
-  if (isXl && admin && !watch && appOrigin) cfg.editorConfig.plugins = { autostart: [plugin.GUID], pluginsData: [`${appOrigin}/oo-plugin/${it.id}/config.json`] };
+  if (isXl && admin && !watch) cfg.editorConfig.plugins = { autostart: [plugin.GUID], pluginsData: [`${appOrigin}/oo-plugin/${it.id}/config.json`] };
   cfg.token = jwtSign(cfg);
   return { config: cfg, scriptUrl: `${CFG.url}/web-apps/apps/api/documents/api.js` };
 }
