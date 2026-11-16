@@ -41,13 +41,30 @@ function protectView(it, admin) {
   return v;
 }
 const hiddenKeys = (it) => Object.keys((it.protect && it.protect.hidden) || {});
+function colIndex(name) {
+  let n = 0;
+  for (const c of name) n = n * 26 + c.charCodeAt(0) - 64;
+  return n - 1;
+}
+function formulaUsesHidden(formula, hidden) {
+  const refs = [...String(formula || '').toUpperCase().matchAll(/(?:[A-Z_][A-Z0-9_. ]*!|')?\$?([A-Z]{1,3})\$?(\d+)/g)];
+  for (const m of refs) if (hidden.has(`${Number(m[2]) - 1},${colIndex(m[1])}`)) return true;
+  return false;
+}
 // Dữ liệu ô mà người này được thấy: ô ẩn bị gỡ nội dung (giữ định dạng) với mọi người không phải admin
 function dataFor(user, it) {
   if (isAdmin(user) || it.type !== 'excel') return it.data;
   const hid = hiddenKeys(it);
   if (!hid.length) return it.data;
   const cells = { ...it.data.cells };
-  for (const k of hid) { const c = cells[k]; if (c) { if (c.s) cells[k] = { s: c.s }; else delete cells[k]; } }
+  const hidden = new Set(hid);
+  for (const k of hid) {
+    const c = cells[k];
+    if (c) { if (c.s) cells[k] = { s: c.s }; else delete cells[k]; }
+  }
+  for (const [k, c] of Object.entries(cells)) {
+    if (c.f && formulaUsesHidden(c.f, hidden)) cells[k] = c.s ? { s: c.s, f: c.f } : { f: c.f };
+  }
   return { ...it.data, cells };
 }
 

@@ -224,6 +224,7 @@ async function fileOf(it, user) {
 // so với bản đã đưa cho họ lúc mở (baseline), để không đè lên những ô admin/người khác sửa trong lúc đó.
 const canon = (v) => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map((q) => [q, x[q]])) : x));
 const baselines = new Map(); // key phiên -> { at, grid }
+const saveLocks = new Map(); // itemId -> promise: serialize concurrent callbacks for one workbook
 function diffCells(base, next) {
   const patch = {};
   for (const k of Object.keys(next.cells)) if (!base.cells[k] || canon(base.cells[k]) !== canon(next.cells[k])) patch[k] = next.cells[k];
@@ -285,6 +286,18 @@ async function saveExcel(user, it, key, buf, ip) {
   }
   keepOrig();
   return { changed: keys.length, reverted };
+}
+async function saveExcelSerial(user, it, key, buf, ip) {
+  const previous = saveLocks.get(it.id) || Promise.resolve();
+  let release;
+  const current = new Promise((resolve) => { release = resolve; });
+  saveLocks.set(it.id, current);
+  await previous;
+  try { return await saveExcel(user, it, key, buf, ip); }
+  finally {
+    release();
+    if (saveLocks.get(it.id) === current) saveLocks.delete(it.id);
+  }
 }
 
 // ---------- cấu hình trả về cho trình duyệt ----------
@@ -385,7 +398,7 @@ function mount(app) {
         if (!supported(it)) return fail('không có item');
         const file = await download(body.url);
         try {
-          if (it.type === 'excel') await saveExcel(user, it, String(body.key || ''), file, req.ip);
+          if (it.type === 'excel') await saveExcelSerial(user, it, String(body.key || ''), file, req.ip);
           else {
             const html = await docxToHtml(file);
             core.applyEdit(user, it.id, { html }, req.ip); // kiểm tra quyền, hạn nộp, trạng thái; ghi nhật ký thao tác; phát WebSocket
