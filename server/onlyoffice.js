@@ -169,6 +169,8 @@ async function autoSaveTick() {
 async function flush(it) {
   if (!enabled() || !supported(it)) return;
   const keys = [...(openKeys.get(it.id)?.keys() || [])];
+  const fallbackKey = sessionKey(it, it.type === 'excel' ? 'u' : 'w', it.type === 'excel' ? (it.protect.rev || 0) : 0);
+  if (!keys.includes(fallbackKey)) keys.push(fallbackKey);
   if (!keys.length) return;
   const v0 = it.version;
   let asked = false;
