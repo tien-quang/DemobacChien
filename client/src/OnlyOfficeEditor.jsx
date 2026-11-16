@@ -77,15 +77,15 @@ export default function WordPane(props) {
 // admin=true: ONLYOFFICE có thêm tab "Quản trị ô" (plugin) để cho phép nhập / khóa / ẩn ô; có nút chuyển sang bảng tính tự viết.
 // user: khi admin đổi khóa/ẩn ô (rev đổi) thì ép lưu phần đang gõ rồi nạp lại bảng tính với quyền mới.
 const DONE = {
-  allow: (n) => `Đã cho phép nhập ${n} ô và bật bảo vệ`,
-  lock: (n) => `Đã khóa ${n} ô và bật bảo vệ`,
+  allow: (n) => `Đã cho phép nhập ${n} ô`,
+  lock: (n) => `Đã khóa ${n} ô`,
   hide: (n) => `Đã ẩn ${n} ô khỏi nhân viên`,
   show: (n) => `Đã hiện lại ${n} ô`,
   on: () => 'Đã bật bảo vệ: chỉ ô được cho phép mới sửa được',
   off: () => 'Đã tắt bảo vệ: nhân viên sửa được mọi ô (ô ẩn vẫn ẩn)',
 };
 const BODY = {
-  allow: (k) => ({ on: true, allow: k }), lock: (k) => ({ on: true, deny: k }),
+  allow: (k) => ({ allow: k }), lock: (k) => ({ deny: k }),
   hide: (k) => ({ hide: k }), show: (k) => ({ show: k }), on: () => ({ on: true }), off: () => ({ on: false }),
 };
 const countOf = (x) => (typeof x === 'number' ? x : Object.keys(x || {}).length);

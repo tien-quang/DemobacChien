@@ -217,6 +217,10 @@ function assign(user, bookId, assignments, deadlines, ip) {
     if (it.assigneeId === uid) continue;
     const prev = it.assigneeId;
     it.assigneeId = uid;
+    if (uid && it.protect.on) {
+      it.protect.on = false;
+      it.protect.rev = (it.protect.rev || 0) + 1;
+    }
     it.status = uid ? 'assigned' : 'unassigned';
     it.submittedAt = null; it.approvedAt = null; it.returnNote = null; it.submitHash = null; it.submitSig = null; it.submitSnapshotId = null;
     it.history.push({ at: new Date().toISOString(), action: uid ? 'assign:' + uid : 'unassign', by: user.id });

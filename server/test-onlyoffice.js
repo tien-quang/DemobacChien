@@ -151,6 +151,13 @@ function client() {
 
     console.log('\n[7] Excel mở bằng ONLYOFFICE (.xlsx <-> ô dữ liệu)');
     await admin.put(`/api/books/${bookId}/assign`, { assignments: { [excel.id]: 'u2' } });
+    const assignedProtect = (await admin.get(`/api/books/${bookId}/data`)).data[excel.id].protect;
+    ok(assignedProtect.on === false, 'giao workbook không tự bật bảo vệ ô');
+    const assignedCell = Object.keys(assignedProtect.cells)[0];
+    await admin.put(`/api/items/${excel.id}/protect`, { allow: [assignedCell] });
+    const allowedWithoutOn = (await admin.get(`/api/books/${bookId}/data`)).data[excel.id].protect;
+    ok(allowedWithoutOn.on === false && allowedWithoutOn.cells[assignedCell], 'cho phép nhập không tự bật bảo vệ');
+    await admin.put(`/api/items/${excel.id}/protect`, { on: true });
     ok((await u1.get(`/api/items/${excel.id}/onlyoffice`)).status === 404, 'user khác không mở được Excel của user2');
     const xr = await u2.get(`/api/items/${excel.id}/onlyoffice`);
     const xc = xr.data.config;

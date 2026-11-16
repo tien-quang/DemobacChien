@@ -84,6 +84,9 @@ function totp(secret, off = 0) {
     ok((await u1.get('/api/books/' + payroll.id)).status === 403, 'user không xem được workbook lớn');
     const asg = await admin.put(`/api/books/${payroll.id}/assign`, { assignments: { [kt.id]: 'u1', [kd.id]: 'u2' } });
     ok(asg.status === 200 && asg.data.changed === 2, 'giao Phòng Kỹ thuật cho user1, Phòng Kinh doanh cho user2');
+    const assignedProtect = (await admin.get('/api/items/' + kt.id)).data.item.protect;
+    ok(assignedProtect.on === false, 'giao workbook không tự bật bảo vệ ô');
+    await admin.put('/api/items/' + kt.id + '/protect', { on: true });
 
     console.log('\n[3] Cách ly: user chỉ thấy workbook nhỏ của mình');
     const mine = (await u1.get('/api/my-items')).data;

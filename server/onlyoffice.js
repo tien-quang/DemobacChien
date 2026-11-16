@@ -296,7 +296,7 @@ async function editorConfig(user, itemId, ip, appOrigin, opts = {}) {
   // Admin thấy từng ký tự và con trỏ của user ngay khi gõ. File, liên kết tải và callback đều ký theo người được giao nên
   // mọi lần lưu từ phiên này vẫn đi qua đúng bộ lọc quyền của người đó.
   const watch = !!opts.watch;
-  let as = user; // người mà file/phiên này thuộc về
+  let as = user; // người mà file/phiên này thuộc về  
   if (watch) {
     if (!core.isAdmin(user) || !isXl) throw core.E(400, 'Chỉ admin xem trực tiếp bảng tính của người được giao');
     as = it.assigneeId && store.user(it.assigneeId);

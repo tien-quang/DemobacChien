@@ -13,8 +13,8 @@
       tabs: [{
         id: 'qtri_o', text: 'Quản trị ô',
         items: [
-          button('oo_allow', 'Cho phép nhập', 'Cho phép nhân viên nhập các ô đang chọn (tự bật bảo vệ)'),
-          button('oo_lock', 'Khóa ô', 'Khóa các ô đang chọn: nhân viên không sửa được (tự bật bảo vệ)'),
+          button('oo_allow', 'Cho phép nhập', 'Cho phép nhân viên nhập các ô đang chọn'),
+          button('oo_lock', 'Khóa ô', 'Bỏ quyền nhập ở các ô đang chọn'),
           button('oo_hide', 'Ẩn ô', 'Ẩn nội dung các ô đang chọn khỏi nhân viên'),
           button('oo_show', 'Hiện ô', 'Cho nhân viên thấy lại các ô đang chọn'),
           button('oo_on', 'Bật bảo vệ', 'Chỉ các ô được cho phép nhập mới sửa được'),
