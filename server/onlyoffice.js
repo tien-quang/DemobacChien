@@ -118,13 +118,25 @@ function trackKey(itemId, key) {
 // Nếu key đổi theo version thì khi tự lưu làm version tăng liên tục, người vào sau sẽ rơi vào phiên khác. Vì vậy: còn phiên đang mở thì dùng lại key đó;
 // hết phiên (Document Server báo đóng) thì key mới theo version hiện tại để không bị dính bản cache cũ.
 // Vai trò (variant): word = cả admin và user chung 1 phiên; excel: a = admin (đủ quyền), u = người được giao (khóa/ẩn ô).
-const sessions = new Map(); // `${itemId}|${variant}` -> { key, rev }
-function sessionKey(it, variant, rev) {
+const sessions = new Map(); // `${itemId}|${variant}` -> { key, rev, context }
+function summaryContext(it, user) {
+  if (it.type !== 'excel' || core.isAdmin(user)) return '';
+  const book = store.books.get(it.bookId);
+  if (!book) return '';
+  const summaries = [];
+  for (const summary of store.bookItems(book)) {
+    if (summary.type === 'excel' && summary.id !== it.id && (summary.viewerIds || []).includes(user.id)) {
+      summaries.push({ id: summary.id, data: core.viewerData(summary) });
+    }
+  }
+  return store.sha(store.canon(summaries));
+}
+function sessionKey(it, variant, rev, context = '') {
   const sk = `${it.id}|${variant}`;
   const cur = sessions.get(sk);
-  if (cur && cur.rev === rev && openKeys.get(it.id)?.has(cur.key)) return cur.key;
-  const key = crypto.createHash('sha256').update(`${it.id}|${it.version}|${variant}|${rev}`).digest('hex').slice(0, 40);
-  sessions.set(sk, { key, rev });
+  if (cur && cur.rev === rev && cur.context === context && openKeys.get(it.id)?.has(cur.key)) return cur.key;
+  const key = crypto.createHash('sha256').update(`${it.id}|${it.version}|${variant}|${rev}|${context}`).digest('hex').slice(0, 40);
+  sessions.set(sk, { key, rev, context });
   return key;
 }
 function dropSession(itemId, key) { // Document Server báo phiên này đã đóng
@@ -169,7 +181,9 @@ async function autoSaveTick() {
 async function flush(it) {
   if (!enabled() || !supported(it)) return;
   const keys = [...(openKeys.get(it.id)?.keys() || [])];
-  const fallbackKey = sessionKey(it, it.type === 'excel' ? 'u' : 'w', it.type === 'excel' ? (it.protect.rev || 0) : 0);
+  const variant = it.type === 'excel' ? 'u' : 'w';
+  const fallbackKey = sessionKey(it, variant, it.type === 'excel' ? (it.protect.rev || 0) : 0,
+    it.type === 'excel' ? summaryContext(it, store.user(it.assigneeId)) : '');
   if (!keys.includes(fallbackKey)) keys.push(fallbackKey);
   if (!keys.length) return;
   const v0 = it.version;
@@ -352,7 +366,8 @@ async function editorConfig(user, itemId, ip, appOrigin, opts = {}) {
   // Word: cùng item + version = cùng key (admin và user cộng tác 1 phiên). Excel: file của admin (đủ, sửa mọi ô) khác file của user (khóa/ẩn ô)
   // nên mỗi vai trò 1 phiên riêng, và khóa của user đổi theo rev để mọi thay đổi quyền đều ra file mới.
   const variant = isXl ? (admin ? 'a' : 'u') : 'w';
-  const key = sessionKey(it, variant, variant === 'u' ? (it.protect.rev || 0) : 0);
+  const context = isXl ? summaryContext(it, as) : '';
+  const key = sessionKey(it, variant, variant === 'u' ? (it.protect.rev || 0) : 0, context);
   trackKey(it.id, key);
   if (isXl && !baselines.has(key)) baselines.set(key, { at: Date.now(), grid: (await parseXlsx(await fileOf(it, as))).parts[0].data });
   const cfg = {
