@@ -2,6 +2,7 @@
 const EventEmitter = require('events');
 const store = require('./store');
 const { cleanCell, keyOK, cleanWidths, cleanDim, MAX_CELLS } = require('./excel');
+const { materialize } = require('./formula');
 
 const bus = new EventEmitter();
 const isAdmin = (u) => u.role === 'admin';
@@ -16,10 +17,11 @@ const E = (s, m) => new HttpError(s, m);
 function perm(user, it) {
   const admin = isAdmin(user);
   const own = it.assigneeId === user.id;
+  const viewer = !admin && (it.viewerIds || []).includes(user.id);
   const pastDue = !!(it.deadline && Date.now() > Date.parse(it.deadline));
-  const read = admin || own;
+  const read = admin || own || viewer;
   const edit = admin || (!FINAL.has(it.status) && !pastDue && own);
-  return { admin, own, read, edit, pastDue };
+  return { admin, own, viewer, read, edit, pastDue };
 }
 
 // Lấy item mà người dùng được phép đọc; không được phép thì báo 404 (không lộ item có tồn tại) và ghi nhật ký
@@ -54,6 +56,15 @@ function formulaUsesHidden(formula, hidden) {
 // Dữ liệu ô mà người này được thấy: ô ẩn bị gỡ nội dung (giữ định dạng) với mọi người không phải admin
 function dataFor(user, it) {
   if (isAdmin(user) || it.type !== 'excel') return it.data;
+  if (perm(user, it).viewer) {
+    const book = store.books.get(it.bookId);
+    if (book) {
+      const others = Object.fromEntries(store.bookItems(book)
+        .filter((x) => x.type === 'excel')
+        .map((x) => [x.name, x.data.cells]));
+      return materialize(it.data, it.name, others);
+    }
+  }
   const hid = hiddenKeys(it);
   if (!hid.length) return it.data;
   const cells = { ...it.data.cells };
@@ -83,6 +94,7 @@ function adminView(it) {
     assigneeId: it.assigneeId, assigneeName: a ? a.name : null,
     submittedAt: it.submittedAt, approvedAt: it.approvedAt, returnNote: it.returnNote, submitHash: it.submitHash, updatedAt: it.updatedAt, version: it.version,
     deadline: it.deadline, protectOn: it.protect.on, protectCount: Object.keys(it.protect.cells).length, hiddenCount: hiddenKeys(it).length,
+    viewerIds: it.viewerIds || [],
     pastDue: !!(it.deadline && Date.now() > Date.parse(it.deadline)),
   };
 }
@@ -286,7 +298,40 @@ function setProtect(user, id, body, ip) {
   return protectView(it, true);
 }
 
+// Quản trị viên gán quyền xem chỉ đọc cho một workbook nhỏ (thường là sheet tổng hợp).
+function setViewers(user, bookId, viewers, ip) {
+  const book = store.books.get(bookId);
+  if (!isAdmin(user) || !book) throw E(404, 'Không tìm thấy');
+  const next = new Map();
+  for (const [iid, ids] of Object.entries(viewers || {})) {
+    if (!book.itemIds.includes(iid)) throw E(400, 'Workbook nhỏ không tồn tại');
+    if (!Array.isArray(ids) || ids.length > 1000) throw E(400, 'Danh sách người xem không hợp lệ');
+    const valid = ids.filter((uid) => typeof uid === 'string' && store.user(uid)?.role === 'user');
+    if (valid.length !== ids.length) throw E(400, 'Người xem không hợp lệ');
+    next.set(iid, [...new Set(valid)]);
+  }
+  let changed = 0;
+  for (const iid of book.itemIds) {
+    const it = store.items.get(iid);
+    if (!it) continue;
+    const ids = next.has(iid) ? next.get(iid) : [];
+    const old = [...(it.viewerIds || [])].sort().join(',');
+    const neu = [...ids].sort().join(',');
+    if (old === neu) continue;
+    it.viewerIds = ids;
+    store.saveItem(it, true);
+    store.audit(user.id, 'viewers', iid, ip, { viewers: ids });
+    changed++;
+  }
+  store.flushItems();
+  for (const iid of book.itemIds) {
+    const it = store.items.get(iid);
+    bus.emit('status', { item: it, prevAssigneeId: it.assigneeId });
+  }
+  return changed;
+}
+
 module.exports = {
   bus, HttpError, E, perm, isAdmin, getReadable, userView, adminView, protectView, hiddenKeys, dataFor,
-  applyEdit, markOpened, submit, approve, reopen, verify, FINAL, assign, setProtect, emitStatus,
+  applyEdit, markOpened, submit, approve, reopen, verify, FINAL, assign, setProtect, setViewers, emitStatus,
 };

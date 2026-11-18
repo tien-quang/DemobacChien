@@ -16,6 +16,7 @@ const toLocalInput = (iso) => {
 /* ================= Tổng quan + phân quyền ================= */
 function Overview({ book, online, users, onOpen, reload, flash }) {
   const [draft, setDraft] = useState({});
+  const [viewerDraft, setViewerDraft] = useState({});
   const [dl, setDl] = useState({});
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState(null);
@@ -23,6 +24,7 @@ function Overview({ book, online, users, onOpen, reload, flash }) {
 
   useEffect(() => {
     setDraft(Object.fromEntries(book.items.map((i) => [i.id, i.assigneeId || ''])));
+    setViewerDraft(Object.fromEntries(book.items.map((i) => [i.id, i.viewerIds || []])));
     setDl(Object.fromEntries(book.items.map((i) => [i.id, toLocalInput(i.deadline)])));
   }, [book.items.map((i) => i.id + i.assigneeId + i.deadline).join()]); // eslint-disable-line
 
@@ -74,6 +76,38 @@ function Overview({ book, online, users, onOpen, reload, flash }) {
     });
   });
   const exportItem = guard((it) => api.download(`/items/${it.id}/export`, `${it.name}.${it.type === 'excel' ? 'xlsx' : 'docx'}`));
+  const editViewers = (it) => {
+    setModal({
+      title: `Gán quyền xem: ${it.name}`,
+      body: (
+        <>
+          <p className="muted small">Người được chọn có thể xem sheet này ở chế độ chỉ xem và theo dõi thay đổi công thức theo thời gian thực.</p>
+          {users.map((u) => (
+            <label className="protect-toggle" key={u.id} style={{ display: 'block', margin: '8px 0' }}>
+              <input type="checkbox" checked={(viewerDraft[it.id] || []).includes(u.id)}
+                onChange={(e) => setViewerDraft((cur) => ({
+                  ...cur,
+                  [it.id]: e.target.checked
+                    ? [...(cur[it.id] || []), u.id]
+                    : (cur[it.id] || []).filter((id) => id !== u.id),
+                }))} />
+              {' '}{u.name}
+            </label>
+          ))}
+          <div className="row" style={{ marginTop: 12 }}>
+            <button className="primary" onClick={guard(async () => {
+              await api.put(`/books/${book.id}/viewers`, {
+                viewers: Object.fromEntries(book.items.map((x) => [x.id, viewerDraft[x.id] || []]))
+              });
+              setModal(null);
+              flash('Đã lưu quyền xem sheet.');
+              reload();
+            })}>Lưu quyền xem</button>
+          </div>
+        </>
+      ),
+    });
+  };
 
   const count = (s) => book.items.filter((i) => i.status === s).length;
   return (
@@ -129,6 +163,7 @@ function Overview({ book, online, users, onOpen, reload, flash }) {
               <td className="actions">
                 <button onClick={() => onOpen(it.id)}>Xem</button>
                 <button className="primary" onClick={() => onOpen(it.id)}>Sửa</button>
+                {it.type === 'excel' && <button onClick={() => editViewers(it)}>Gán xem{(it.viewerIds || []).length ? ` (${it.viewerIds.length})` : ''}</button>}
                 {['submitted', 'approved'].includes(it.status) && <button onClick={() => verify(it)}>Xác minh</button>}
                 {it.status === 'submitted' && <button className="primary" onClick={() => approve(it)}>Duyệt</button>}
                 {['submitted', 'approved'].includes(it.status) && <button onClick={() => giveBack(it)}>Trả lại</button>}

@@ -57,7 +57,7 @@ const DUMMY = store.hashPw('khong-ton-tai');
 app.post('/api/login', (req, res) => {
   const ip = ipOf(req);
   if (!auth.hit('login:' + ip, 30, 60000)) return res.status(429).json({ error: 'Quá nhiều yêu cầu, thử lại sau' });
-  const { username, password, otp } = req.body || {};
+  const { username, password, otp, policyVersion } = req.body || {};
   const kIp = `ip:${ip}:${username}`, kUser = 'u:' + username;
   const wait = Math.max(auth.lockedFor(kIp), auth.lockedFor(kUser));
   if (wait) return res.status(429).json({ error: `Tài khoản tạm khóa, thử lại sau ${Math.ceil(wait / 60)} phút` });
@@ -79,7 +79,7 @@ app.post('/api/login', (req, res) => {
   if (old) { auth.revokeById(old.id); live.closeSession(old.h); }
   auth.setCookie(res, auth.createSession(u, ip, req.headers['user-agent']), SLOT(req));
   auth.sweepStaleCookies(req, res, SLOT(req));
-  store.audit(u.id, 'login', null, ip);
+  store.audit(u.id, 'login', null, ip, policyVersion ? { policyVersion } : null);
   res.json({ ok: true });
 });
 
@@ -261,6 +261,11 @@ app.put('/api/books/:id/assign', adminOnly, (req, res) => {
   core.bus.emit('book', { bookId: b.id });
   res.json({ changed: n, items: store.bookItems(b).map(core.adminView) });
 });
+app.put('/api/books/:id/viewers', adminOnly, (req, res) => {
+  const n = core.setViewers(req.user, req.params.id, req.body?.viewers || {}, ipOf(req));
+  core.bus.emit('book', { bookId: req.params.id });
+  res.json({ changed: n, items: store.bookItems(getBook(req.params.id)).map(core.adminView) });
+});
 // Xuất workbook lớn thành 1 file .xlsx gom tất cả sheet (chỉ admin)
 app.get('/api/books/:id/export', adminOnly, async (req, res) => {
   const b = getBook(req.params.id);
@@ -280,7 +285,10 @@ const consView = (c) => ({
   id: c.id, n: c.n, at: c.at, by: c.by ? store.user(c.by)?.name || c.by : 'Tự động', mode: c.mode, sha: c.sha, size: c.size,
   docx: c.manifest.docx ? { size: c.manifest.docx.size, count: c.manifest.docx.count } : null,
   total: c.manifest.items.length, included: c.manifest.items.filter((r) => r.included).length, changed: c.manifest.changed, sheets: c.manifest.sheets,
-  items: c.manifest.items.map((r) => ({ name: r.name, type: r.type, assignee: r.assignee, status: r.status, included: r.included, source: r.source, note: r.note, changed: !!(r.changed || r.isNew) })),
+  items: c.manifest.items.map((r) => ({
+    name: r.name, type: r.type, assignee: r.assignee, status: r.status, included: r.included, source: r.source,
+    note: r.note, changed: !!(r.changed || r.isNew), cellsChanged: r.cellsChanged || 0, examples: r.examples || [],
+  })),
 });
 app.get('/api/books/:id/consolidations', adminOnly, (req, res) => {
   const b = getBook(req.params.id);
@@ -357,7 +365,7 @@ app.get('/api/books/:id/consolidations/diff', adminOnly, (req, res) => {
 
 // ---------- workbook nhỏ (item) ----------
 app.get('/api/my-items', (req, res) => {
-  const mine = [...store.items.values()].filter((i) => i.assigneeId === req.user.id);
+  const mine = [...store.items.values()].filter((i) => i.assigneeId === req.user.id || (i.viewerIds || []).includes(req.user.id));
   res.json(mine.map((i) => { const v = core.userView(i, req.user); return { id: v.id, name: v.name, type: v.type, status: v.status, editable: v.editable, deadline: v.deadline, pastDue: v.pastDue, returnNote: v.returnNote }; }));
 });
 app.get('/api/onlyoffice/status', (req, res) => res.json({ enabled: oo.enabled() }));

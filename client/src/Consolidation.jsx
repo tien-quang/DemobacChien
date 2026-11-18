@@ -36,13 +36,16 @@ export default function Consolidation({ bookId, flash }) {
     title: `Chi tiết bản v${c.n}`,
     body: (
       <table className="list">
-        <thead><tr><th>Workbook nhỏ</th><th>Người làm</th><th>Trong file?</th><th>Nguồn / ghi chú</th></tr></thead>
+        <thead><tr><th>Workbook nhỏ</th><th>Người làm</th><th>Trong file?</th><th>Ô thay đổi</th><th>Nguồn / ghi chú</th></tr></thead>
         <tbody>
           {c.items.map((r, i) => (
             <tr key={i}>
               <td>{r.name}{r.changed && <span className="tag in_progress"> đổi</span>}</td>
               <td>{r.assignee || (r.type === 'excel' ? 'Admin' : '—')}</td>
               <td>{r.included ? <b className="ok-text">Có</b> : <b className="late">Không</b>}</td>
+              <td className="small">
+                {r.cellsChanged ? <><b>{r.cellsChanged} ô</b>{r.examples?.map((e, j) => <div key={j}><code>{e.cell}</code>: {String(e.from) || '(trống)'} → <b>{String(e.to) || '(trống)'}</b></div>)}</> : '—'}
+              </td>
               <td className="small">{r.note || SRC[r.source] || ''}</td>
             </tr>
           ))}

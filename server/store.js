@@ -171,7 +171,8 @@ function makeItem(row, m) {
     id: row.id, bookId: row.book_id, ord: row.ord, type: row.type, assigneeId: row.assignee_id, status: row.status,
     version: row.version, flushed: row.flushed, updatedAt: row.updated_at, submittedAt: row.submitted_at,
     submitHash: row.submit_hash, deadline: row.deadline,
-    name: m.name, protect: m.protect, history: m.history, submitSig: m.submitSig || null, submitSnapshotId: m.submitSnapshotId || null,
+    name: m.name, protect: m.protect, viewerIds: Array.isArray(m.viewerIds) ? m.viewerIds.filter((id) => typeof id === 'string') : [],
+    history: m.history, submitSig: m.submitSig || null, submitSnapshotId: m.submitSnapshotId || null,
     returnNote: m.returnNote || null, approvedAt: m.approvedAt || null,
   };
   Object.defineProperty(it, 'data', { get() { return entry(it).data; }, set(v) { replaceData(it, v); }, enumerable: false, configurable: true });
@@ -179,7 +180,7 @@ function makeItem(row, m) {
 }
 function writeItemRow(it) {
   const dek = dekOf(it.bookId);
-  const m = { name: it.name, protect: it.protect, history: it.history, submitSig: it.submitSig, submitSnapshotId: it.submitSnapshotId, returnNote: it.returnNote, approvedAt: it.approvedAt };
+  const m = { name: it.name, protect: it.protect, viewerIds: it.viewerIds || [], history: it.history, submitSig: it.submitSig, submitSnapshotId: it.submitSnapshotId, returnNote: it.returnNote, approvedAt: it.approvedAt };
   P('INSERT OR REPLACE INTO items VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)').run(
     it.id, it.bookId, it.ord, it.type, it.assigneeId, it.status, it.version, it.flushed, it.updatedAt, it.submittedAt, it.submitHash, it.deadline,
     pack(dek, m, 'item:' + it.id));

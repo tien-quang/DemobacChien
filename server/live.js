@@ -4,10 +4,12 @@ const { WebSocketServer } = require('ws');
 const auth = require('./auth');
 const store = require('./store');
 const core = require('./core');
+const { materialize } = require('./formula');
 
 module.exports = function attach(server) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 8 * 1024 * 1024 });
   const bookWatchers = new Map(); // bookId -> Set<ws>
+  const viewerWatchers = new Map(); // bookId -> Set<ws>
   const adminAll = new Set();     // admin ở trang chủ (xem tổng quan mọi workbook lớn)
   const rooms = new Map();        // itemId -> Set<ws> (người được giao đang mở)
   const byUser = new Map();       // userId -> Set<ws>
@@ -43,12 +45,33 @@ module.exports = function attach(server) {
     if (o.widths) msg.widths = o.widths;
     if (o.html !== undefined) msg.html = o.html;
     toAdmins(o.bookId, msg);
+    const book = store.books.get(o.bookId);
+    if (book) {
+      const xl = store.bookItems(book).filter((it) => it.type === 'excel');
+      const others = Object.fromEntries(xl.map((it) => [it.name, it.data.cells]));
+      for (const summary of xl) {
+        if (!(summary.viewerIds || []).length) continue;
+        const data = materialize(summary.data, summary.name, others);
+        const patch = {};
+        for (const [k, cell] of Object.entries(data.cells)) {
+          if (cell.f) patch[k] = { f: cell.f, v: cell.v };
+        }
+        if (!Object.keys(patch).length) continue;
+        for (const uid of summary.viewerIds) {
+          toUser(uid, { t: 'patch', item: summary.id, version: summary.version, patch });
+        }
+      }
+    }
   });
   core.bus.on('status', ({ item, prevAssigneeId }) => {
     toAdmins(item.bookId, { t: 'status', item: core.adminView(item) });
     if (item.assigneeId) {
       const u = store.user(item.assigneeId);
       toUser(item.assigneeId, { t: 'status', item: core.userView(item, u) });
+    }
+    for (const uid of item.viewerIds || []) {
+      const u = store.user(uid);
+      if (u) toUser(uid, { t: 'status', item: core.userView(item, u) });
     }
     if (prevAssigneeId && prevAssigneeId !== item.assigneeId) {
       toUser(prevAssigneeId, { t: 'status', item: item.id, revoked: true });
@@ -103,6 +126,7 @@ module.exports = function attach(server) {
       del(byUser, ws.user.id, ws);
       adminAll.delete(ws);
       ws.watching.forEach((b) => del(bookWatchers, b, ws));
+      ws.watching.forEach((b) => del(viewerWatchers, b, ws));
       [...ws.rooms].forEach((i) => leaveRoom(ws, i));
     });
   });
@@ -111,10 +135,21 @@ module.exports = function attach(server) {
     const user = ws.user;
     switch (m.t) {
       case 'sub': { // admin theo dõi 1 workbook lớn, hoặc '*' = tất cả (trang chủ)
-        if (!core.isAdmin(user)) throw core.E(403, 'Không đủ quyền');
-        if (m.book === '*') { adminAll.add(ws); return send(ws, { t: 'presenceAll', online: [...rooms.keys()] }); }
+        if (m.book === '*') {
+          if (!core.isAdmin(user)) throw core.E(403, 'Không đủ quyền');
+          adminAll.add(ws);
+          return send(ws, { t: 'presenceAll', online: [...rooms.keys()] });
+        }
         if (!store.books.has(m.book)) throw core.E(404, 'Không tìm thấy');
-        add(bookWatchers, m.book, ws); ws.watching.add(m.book);
+        if (core.isAdmin(user)) {
+          add(bookWatchers, m.book, ws);
+        } else {
+          const b = store.books.get(m.book);
+          const canView = b && b.itemIds.some((iid) => (store.items.get(iid)?.viewerIds || []).includes(user.id));
+          if (!canView) throw core.E(403, 'Không đủ quyền');
+          add(viewerWatchers, m.book, ws);
+        }
+        ws.watching.add(m.book);
         return send(ws, { t: 'presenceAll', online: onlineIn(m.book) });
       }
       case 'open': { // người được giao mở workbook nhỏ của mình (để admin thấy trạng thái trực tuyến)
@@ -141,7 +176,7 @@ module.exports = function attach(server) {
         return toAdmins(it.bookId, { t: 'sel', item: it.id, r: m.r, c: m.c, typing, by: user.name });
       }
       case 'unsub': {
-        if (m.book === '*') adminAll.delete(ws); else { del(bookWatchers, m.book, ws); ws.watching.delete(m.book); }
+        if (m.book === '*') adminAll.delete(ws); else { del(bookWatchers, m.book, ws); del(viewerWatchers, m.book, ws); ws.watching.delete(m.book); }
         return undefined;
       }
       case 'leave': if (ws.rooms.has(String(m.item))) leaveRoom(ws, String(m.item)); return undefined;
