@@ -333,7 +333,7 @@ async function saveExcelSerial(user, it, key, buf, ip) {
 // ---------- cấu hình trả về cho trình duyệt ----------
 async function editorConfig(user, itemId, ip, appOrigin, opts = {}) {
   const it = core.getReadable(user, itemId, ip);
-  if (!core.isAdmin(user) && it.assigneeId !== user.id) throw core.E(403, 'Chỉ người được giao mới mở được trình soạn thảo');
+  if (!core.isAdmin(user) && it.assigneeId !== user.id && !core.perm(user, it).viewer) throw core.E(403, 'Chỉ người được giao hoặc người được cấp xem mới mở được trình soạn thảo');
   if (!supported(it)) throw core.E(400, 'Chỉ dùng cho văn bản Word hoặc bảng tính');
   const isXl = it.type === 'excel';
   // Chế độ XEM TRỰC TIẾP (Live Viewer) cho admin: vào ĐÚNG phiên mà người được giao đang sửa (cùng file, cùng key) ở chế độ chỉ xem.

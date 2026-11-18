@@ -154,6 +154,18 @@ module.exports = function attach(server) {
       }
       case 'open': { // người được giao mở workbook nhỏ của mình (để admin thấy trạng thái trực tuyến)
         const it = core.getReadable(user, String(m.item), ws.ip);
+        if (!core.isAdmin(user) && it.assigneeId === user.id) {
+          const book = store.books.get(it.bookId);
+          if (book) {
+            for (const summary of store.bookItems(book)) {
+              if (summary.type !== 'excel' || summary.id === it.id) continue;
+              if (!(summary.viewerIds || []).includes(user.id)) continue;
+              ws.views.add(summary.id);
+              add(viewRooms, summary.id, ws);
+              send(ws, { t: 'summary', item: summary.id, data: core.viewerData(summary) });
+            }
+          }
+        }
         if (core.isAdmin(user) || it.assigneeId !== user.id) {
           if (core.perm(user, it).viewer) { // người chỉ xem bảng tổng hợp: đăng ký nhận giá trị mới; gửi luôn bản mới nhất (bù thay đổi đã lỡ khi mất kết nối)
             ws.views.add(it.id); add(viewRooms, it.id, ws);

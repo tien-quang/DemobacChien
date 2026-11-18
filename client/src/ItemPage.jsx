@@ -52,7 +52,7 @@ export default function ItemPage({ me, id }) {
         flash(`Bảng tổng hợp vừa thay đổi (${changed.size} ô).`);
       }
     } else if (m.t === 'summary') {
-      setSheetRevision((n) => n + 1);
+      api.post(`/items/${id}/onlyoffice/flush`).catch(() => {}).finally(() => setSheetRevision((n) => n + 1));
     }
   });
 
