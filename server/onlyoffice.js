@@ -208,6 +208,7 @@ function origFile(it) {
 // File .xlsx theo vai trò: admin thấy đủ và sửa được mọi ô; user bị gỡ nội dung ô ẩn và (khi bật bảo vệ) chỉ nhập được ở ô cho phép
 async function buildXlsx(it, user) {
   let data = it.data, protect;
+  const parts = [];
   if (!core.isAdmin(user)) {
     data = core.dataFor(user, it);
     const hid = it.protect.hidden || {};
@@ -221,7 +222,23 @@ async function buildXlsx(it, user) {
       };
     }
   }
-  return Buffer.from(await exportXlsx({ parts: [{ name: it.name, data, protect }] }));
+  parts.push({ name: it.name, data, protect });
+
+  if (!core.isAdmin(user)) {
+    const book = store.books.get(it.bookId);
+    if (book) {
+      for (const summary of store.bookItems(book)) {
+        if (summary.id === it.id || summary.type !== 'excel') continue;
+        if (!(summary.viewerIds || []).includes(user.id)) continue;
+        parts.push({
+          name: summary.name,
+          data: core.viewerData(summary),
+          protect: { unlock: [], password: store.sign('summarypw|' + summary.id) },
+        });
+      }
+    }
+  }
+  return Buffer.from(await exportXlsx({ parts }));
 }
 async function fileOf(it, user) {
   return origFile(it) || (it.type === 'excel' ? buildXlsx(it, user) : await htmlToDocx(it.data.html));
@@ -255,9 +272,14 @@ function cleanPatchLoose(patch) {
 async function saveExcel(user, it, key, buf, ip) {
   const { parts } = await parseXlsx(buf);
   if (!parts.length) throw new Error('File .xlsx không có sheet nào');
-  const next = parts[0].data; // chỉ lấy sheet đầu: mỗi workbook nhỏ = 1 bảng
+  const ownPart = parts.find((p) => p.name === it.name) || parts[0];
+  const next = ownPart.data;
   const known = baselines.get(key);
-  const base = known ? known.grid : (await parseXlsx(await fileOf(it, user))).parts[0].data;
+  const baselineParts = known ? null : (await parseXlsx(await fileOf(it, user))).parts;
+  const basePart = known
+    ? known.grid
+    : ((baselineParts.find((p) => p.name === it.name) || baselineParts[0]).data);
+  const base = basePart;
   let patch = cleanPatchLoose(diffCells(base, next));
   baselines.set(key, { at: Date.now(), grid: next }); // phiên vẫn mở: lần lưu sau so với bản này
   const p = core.perm(user, it);

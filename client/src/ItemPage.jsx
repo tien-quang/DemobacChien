@@ -4,16 +4,13 @@ import { live } from './live.js';
 import { diffGrid } from './diff.js';
 import { go, useLive, useToast, deadlineText, ConnDot, STATUS } from './util.jsx';
 import Spreadsheet from './Spreadsheet.jsx';
-import WordPane, { SheetPane, OnlyOfficeEditor } from './OnlyOfficeEditor.jsx';
+import WordPane, { SheetPane } from './OnlyOfficeEditor.jsx';
 
 // Workbook nhỏ của user: cửa sổ độc lập, chỉ chứa đúng 1 bảng, không có tab/sheet/workbook nào khác.
 export default function ItemPage({ me, id }) {
   const [item, setItem] = useState(null);
   const [data, setData] = useState(null);
-  const [summaries, setSummaries] = useState([]);
-  const [summaryData, setSummaryData] = useState({});
-  const [activeView, setActiveView] = useState('work');
-  const [summaryRevisions, setSummaryRevisions] = useState({});
+  const [sheetRevision, setSheetRevision] = useState(0);
   const [pending, setPending] = useState(0);
   const [error, setError] = useState('');
   const [toast, flash] = useToast();
@@ -25,14 +22,6 @@ export default function ItemPage({ me, id }) {
   const load = async () => {
     const r = await api.get('/items/' + id);
     setItem(r.item); setData(r.data); sent.current = r.data; dataRef.current = r.data;
-    const mine = await api.get('/my-items');
-    const viewOnly = (mine || []).filter((x) => x.viewOnly);
-    const loaded = await Promise.all(viewOnly.map(async (x) => {
-      const s = await api.get('/items/' + x.id);
-      return { item: s.item, data: s.data };
-    }));
-    setSummaries(loaded);
-    setSummaryData(Object.fromEntries(loaded.map((x) => [x.item.id, x.data])));
   };
   useEffect(() => {
     load().catch((e) => setError(e.message));
@@ -40,15 +29,6 @@ export default function ItemPage({ me, id }) {
     const off = live.sub({ t: 'open', item: id }, { t: 'leave', item: id });
     return () => { off(); clearTimeout(curTimer.current); clearTimeout(fxTimer.current); };
   }, [id]); // eslint-disable-line
-
-  useEffect(() => {
-    if (!summaries.length) return undefined;
-    const offs = summaries.map((x) => live.sub(
-      { t: 'open', item: x.item.id },
-      { t: 'leave', item: x.item.id },
-    ));
-    return () => offs.forEach((off) => off());
-  }, [summaries]);
 
   useEffect(() => {
     const warn = (e) => { if (live.pendingCount()) { e.preventDefault(); e.returnValue = ''; } };
@@ -72,14 +52,7 @@ export default function ItemPage({ me, id }) {
         flash(`Bảng tổng hợp vừa thay đổi (${changed.size} ô).`);
       }
     } else if (m.t === 'summary') {
-      setSummaries((cur) => cur.map((x) => x.item.id === m.item ? { ...x, data: m.data } : x));
-      setSummaryData((cur) => ({ ...cur, [m.item]: m.data }));
-      setSummaryRevisions((cur) => ({ ...cur, [m.item]: (cur[m.item] || 0) + 1 }));
-      if (activeView === m.item) {
-        setCellFx(new Set(Object.keys(m.data.cells || {})));
-        clearTimeout(fxTimer.current);
-        fxTimer.current = setTimeout(() => setCellFx(null), 2500);
-      }
+      setSheetRevision((n) => n + 1);
     }
   });
 
@@ -112,49 +85,33 @@ export default function ItemPage({ me, id }) {
   const wm = `${me.name} · ${me.username} · #${me.tag} · ${new Date().toLocaleDateString('vi-VN')}`;
   const admin = me.role === 'admin';
   const viewOnly = !!item.viewOnly;
-  const activeSummary = activeView !== 'work' ? summaries.find((x) => x.item.id === activeView) : null;
-  const activeSummaryData = activeSummary ? (summaryData[activeSummary.item.id] || activeSummary.data) : null;
-  const activeViewOnly = !!activeSummary || viewOnly;
   const notice = viewOnly ? 'Bảng tổng hợp (chỉ xem): số liệu tự cập nhật khi các bài được giao thay đổi. Ô vừa đổi sẽ nháy sáng.'
     : admin
     ? (item.status === 'approved' ? 'Đã duyệt: quản trị viên vẫn có thể chỉnh sửa' : item.status === 'submitted' ? 'Đã nộp: quản trị viên vẫn có thể chỉnh sửa' : 'Quản trị viên có thể chỉnh sửa')
     : item.status === 'approved' ? 'Đã được duyệt: chỉ xem' : item.status === 'submitted' ? 'Đã nộp, chờ duyệt: chỉ xem' : item.pastDue ? 'Quá hạn nộp: chỉ xem' : !item.editable ? 'Chỉ xem' : '';
   return (
     <div className="docpage">
-      <div className={'titlebar ' + (activeSummary ? 'excel' : item.type)}>
+      <div className={'titlebar ' + item.type}>
         <button className="ghost" onClick={() => go('#/')}>Quay lại</button>
-        <span className="doctitle-bar">{activeSummary ? activeSummary.item.name : item.name}</span>
-        {activeViewOnly ? <span className="tag light approved">Chỉ xem · bảng tổng hợp</span> : <span className={'tag light ' + item.status}>{STATUS[item.status]}</span>}
-        {!activeViewOnly && item.deadline && <span className={'savemsg' + (item.pastDue ? ' late-w' : '')}>{deadlineText(item.deadline)}</span>}
+        <span className="doctitle-bar">{item.name}</span>
+        {viewOnly ? <span className="tag light approved">Chỉ xem · bảng tổng hợp</span> : <span className={'tag light ' + item.status}>{STATUS[item.status]}</span>}
+        {!viewOnly && item.deadline && <span className={'savemsg' + (item.pastDue ? ' late-w' : '')}>{deadlineText(item.deadline)}</span>}
         <span className="grow" />
-        {!activeViewOnly && item.editable && <span className="savemsg">{pending ? 'Đang gửi…' : 'Đã lưu trên máy chủ'}</span>}
+        {!viewOnly && item.editable && <span className="savemsg">{pending ? 'Đang gửi…' : 'Đã lưu trên máy chủ'}</span>}
         <ConnDot />
-        {!activeViewOnly && item.editable && !admin && <button className="submit" onClick={submit}>Nộp bài</button>}
+        {!viewOnly && item.editable && !admin && <button className="submit" onClick={submit}>Nộp bài</button>}
       </div>
       {item.returnNote && item.editable && <div className="return-note"><b>Quản trị viên trả lại bài:</b> {item.returnNote}</div>}
-      {summaries.length > 0 && (
-        <div className="item-inline-tabs">
-          <button className={activeView === 'work' ? 'active' : ''} onClick={() => setActiveView('work')}>
-            Bài đang làm
-          </button>
-          {summaries.map((x) => (
-            <button key={x.item.id} className={activeView === x.item.id ? 'active' : ''} onClick={() => setActiveView(x.item.id)}>
-              {x.item.name} · Chỉ xem
-            </button>
-          ))}
-        </div>
-      )}
       <div className="docbody">
-        {activeSummary ? (
-          <OnlyOfficeEditor
-            key={`${activeSummary.item.id}-${summaryRevisions[activeSummary.item.id] || 0}`}
-            itemId={activeSummary.item.id}
-            notice="Bảng tổng hợp (chỉ xem): số liệu tự cập nhật trong cùng trang khi các bài được giao thay đổi."
-          />
-        ) : viewOnly ? (
-          <OnlyOfficeEditor key={`${item.id}-${summaryRevisions[item.id] || 0}`} itemId={item.id} notice={notice} />
+        {viewOnly ? (
+          <SheetPane key={item.id} id={item.id} editable={false} notice={notice} rev={item.protect && item.protect.rev}>
+            <Spreadsheet
+              key={item.id} sheetName={item.name} data={data} others={{}} editable={false} restricted
+              protect={item.protect} watermark={wm} notice={notice} flash={cellFx} onBlocked={flash} onChange={() => {}}
+            />
+          </SheetPane>
         ) : item.type === 'excel' ? (
-          <SheetPane key={item.id} id={item.id} editable={item.editable} notice={notice} rev={item.protect && item.protect.rev}>
+          <SheetPane key={`${item.id}-${sheetRevision}`} id={item.id} editable={item.editable} notice={notice} rev={item.protect && item.protect.rev}>
             <Spreadsheet
               key={item.id} sheetName={item.name} data={data} others={{}} editable={item.editable} restricted
               protect={item.protect} watermark={wm} notice={notice} onBlocked={flash} onCursor={onCursor} onChange={onSheet}
