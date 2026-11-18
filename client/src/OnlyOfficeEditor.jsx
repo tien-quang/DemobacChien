@@ -144,7 +144,7 @@ export function SheetPane({ id, editable, notice, children, admin, rev, protect,
     <div className="oo-switch-wrap" style={{ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0, minWidth: 0, width: '100%' }}>
       <div className="ribbon" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         {assigned && tab('watch', 'Xem user làm (trực tiếp)')}
-        {tab('oo', 'Giao diện Office (sửa)')}
+        {tab('oo', 'Giao diện Office & Quản trị ô')}
         {tab('classic', 'Khóa ô và theo dõi')}
         {busy && <span className="muted">Đang lưu…</span>}
         {protect && <span className="muted">Bảo vệ: <b>{protect.on ? 'Bật' : 'Tắt'}</b> · {allowedN} ô cho phép nhập · {hiddenN} ô ẩn</span>}

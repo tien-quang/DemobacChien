@@ -226,7 +226,7 @@ function totp(secret, off = 0) {
     ok(!!ev, 'admin nhận thông báo thời gian thực: đã có bản tổng hợp mới');
     const m1 = c1.items[0].items;
     ok(m1.find((r) => r.name === 'Nhóm khách hàng A').included && m1.find((r) => r.name === 'Nhóm khách hàng A').source === 'submitted', 'v1: nhóm A (đã nộp) được đưa vào từ bản chụp bất biến');
-    ok(!m1.find((r) => r.name === 'Nhóm khách hàng B').included, 'v1: nhóm B (đã giao, chưa nộp) KHÔNG đưa vào');
+    ok(m1.find((r) => r.name === 'Nhóm khách hàng B').included && m1.find((r) => r.name === 'Nhóm khách hàng B').source === 'assigned', 'v1: nhóm B (đưa giao nhưng chưa nộp) giữ số liệu lúc giao, không bị gỡ khỏi công thức');
     const skip = await admin.post(`/api/books/${debt.id}/consolidate`, {});
     await sleep(1500);
     ok((await listC()).items.length === 1, 'bấm tổng hợp khi không có thay đổi: không tạo phiên bản thừa', JSON.stringify(skip.data));
@@ -254,8 +254,8 @@ function totp(secret, off = 0) {
     ok(dl.status === 200 && Buffer.isBuffer(dl.data), 'tải file tổng hợp bằng liên kết hợp lệ');
     const wb = new ExcelJS.Workbook(); await wb.xlsx.load(dl.data);
     const names = wb.worksheets.map((w) => w.name);
-    ok(names[0] === 'Trạng thái nộp' && names.includes('Nhóm khách hàng A') && names.includes('Nhóm khách hàng B') && names.includes('Tổng hợp công nợ') && !names.includes('Nhóm khách hàng C'),
-      'file tổng hợp: có sheet trạng thái + nhóm đã nộp + sheet tổng hợp của admin, loại nhóm C chưa nộp', names.join(' | '));
+    ok(names[0] === 'Trạng thái nộp' && names.includes('Nhóm khách hàng A') && names.includes('Nhóm khách hàng B') && names.includes('Nhóm khách hàng C') && names.includes('Tổng hợp công nợ'),
+      'file tổng hợp: có sheet trạng thái, bài đã nộp và giữ sheet chưa nộp ở số liệu lúc giao', names.join(' | '));
     const resOf = (ws, a) => { const v = ws.getCell(a).value; return typeof v === 'object' && v !== null ? v.result : v; };
     const totA = resOf(wb.getWorksheet('Nhóm khách hàng A'), 'H10'), totB = resOf(wb.getWorksheet('Nhóm khách hàng B'), 'H10');
     const sumTotal = resOf(wb.getWorksheet('Tổng hợp công nợ'), 'B5'), sumB = resOf(wb.getWorksheet('Tổng hợp công nợ'), 'B6');
@@ -294,7 +294,7 @@ function totp(secret, off = 0) {
     await admin.post(`/api/books/${debt.id}/consolidate`, {});
     const c5 = await waitCons(5);
     const rA4 = c5.items[0].items.find((r) => r.name === 'Nhóm khách hàng A');
-    ok(c5.items.length === 5 && !rA4.included && /toàn vẹn/.test(rA4.note), 'tổng hợp tự loại bài nộp không còn toàn vẹn và ghi chú rõ lý do');
+    ok(c5.items.length === 5 && rA4.included && /toàn vẹn/.test(rA4.note), 'bài nộp không còn toàn vẹn: tổng hợp giữ bản trước đó và ghi chú rõ lý do');
     let blocked = false; try { dbm.prepare('UPDATE audit SET a=? WHERE n=1').run('x'); } catch { blocked = true; }
     let blocked2 = false; try { dbm.prepare('DELETE FROM audit WHERE n=1').run(); } catch { blocked2 = true; }
     ok(blocked && blocked2, 'nhật ký là bảng chỉ ghi thêm: cơ sở dữ liệu từ chối sửa/xóa (trigger)');
@@ -435,7 +435,7 @@ function totp(secret, off = 0) {
     ok(!!cb, 'tổng hợp chế độ "chỉ bài đã duyệt" xong, có kèm file văn bản');
     const rowsOf = Object.fromEntries(cb.items.map((r) => [r.name, r]));
     ok(rowsOf.A1.included && rowsOf.A1.source === 'approved', 'workbook A1 đã duyệt được đưa vào workbook lớn');
-    ok(!rowsOf.A2.included && !rowsOf.A3.included, 'A2, A3 chưa nộp nên chưa vào workbook lớn');
+    ok(rowsOf.A2.included && rowsOf.A3.included && rowsOf.A2.source === 'assigned' && rowsOf.A3.source === 'assigned', 'A2, A3 chưa nộp: giữ số liệu lúc giao thay vì bỏ khỏi workbook lớn');
     ok(rowsOf['Biên bản họp'].included, 'văn bản Word đã duyệt được đưa vào');
     const dlw = (await admin.post(`/api/consolidations/${cb.id}/link`, { kind: 'docx' })).data;
     ok(/kind=docx/.test(dlw.path), 'liên kết tải file văn bản có chữ ký riêng theo loại file');
@@ -448,7 +448,7 @@ function totp(secret, off = 0) {
     const xlsxLink = (await admin.post(`/api/consolidations/${cb.id}/link`, {})).data;
     const wbx = new ExcelJS.Workbook(); await wbx.xlsx.load((await admin.get('/api' + xlsxLink.path)).data);
     const sheetNames = wbx.worksheets.map((w) => w.name);
-    ok(sheetNames.includes('A1') && !sheetNames.includes('A2') && !sheetNames.includes('A3') && sheetNames[0] === 'Trạng thái nộp', 'file Excel tổng hợp chỉ chứa A1 (đã duyệt) và sheet trạng thái', sheetNames.join(','));
+    ok(sheetNames.includes('A1') && sheetNames.includes('A2') && sheetNames.includes('A3') && sheetNames[0] === 'Trạng thái nộp', 'file Excel tổng hợp chứa A1 đã duyệt và giữ A2, A3 ở số liệu lúc giao', sheetNames.join(','));
 
     console.log('\n[13] Cấp quyền XEM bảng tổng hợp cho user, và liệt kê ô user đã đổi khi nộp bài');
     const u4 = client(); await u4.login('user4', 'user123');

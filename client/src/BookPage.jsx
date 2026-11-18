@@ -208,6 +208,7 @@ export default function BookPage({ me, id }) {
   const [flashes, setFlashes] = useState({});
   const [users, setUsers] = useState([]);
   const [active, setActive] = useState('overview');
+  const [summaryRevision, setSummaryRevision] = useState(0);
   const [error, setError] = useState('');
   const [toast, flash] = useToast();
   const datasRef = useRef({});
@@ -248,6 +249,7 @@ export default function BookPage({ me, id }) {
     } else if (m.t === 'patch') {
       if (m.by === me.id) return;
       setItemData(m.item, (cur) => ({ ...cur, version: m.version, data: m.html !== undefined ? { html: m.html } : applyPatch(cur.data, m) }));
+      setSummaryRevision((n) => n + 1);
       if (m.patch) flashKeys(m.item, Object.keys(m.patch));
       setBook((b) => b && ({ ...b, items: b.items.map((i) => (i.id === m.item ? { ...i, updatedAt: new Date().toISOString() } : i)) }));
     } else if (m.t === 'sel') setCursors((c) => ({ ...c, [m.item]: { r: m.r, c: m.c, by: m.by, typing: m.typing } }));
@@ -300,7 +302,7 @@ export default function BookPage({ me, id }) {
         ) : active === 'consol' ? (
           <Consolidation bookId={book.id} flash={flash} />
         ) : !it || !d ? <p className="wrap muted">Đang tải…</p> : it.type === 'excel' ? (
-          <SheetPane key={it.id} id={it.id} editable={editable} notice={notice} admin protect={d.protect} assigned={!!it.assigneeId}>
+          <SheetPane key={`${it.id}-${active === it.id ? summaryRevision : 0}`} id={it.id} editable={editable} notice={notice} admin protect={d.protect} assigned={!!it.assigneeId}>
             <Spreadsheet
               key={it.id} sheetName={it.name} data={d.data} others={others} editable={editable} restricted={false}
               protect={d.protect} remote={online.has(it.id) ? cursors[it.id] : null} flash={flashes[it.id]} notice={notice}

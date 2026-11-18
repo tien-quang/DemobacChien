@@ -50,6 +50,26 @@ async function consolidate({ bookId, mode, by }) {
   const prev = store.listConsolidations(bookId)[0] || null;
   const prevRows = new Map((prev ? prev.manifest.items : []).map((r) => [r.itemId, r]));
   const rows = [], included = [];
+  const keepLastData = (it, p, row, reason) => {
+    if (p?.included && p.snapshotId) {
+      const ps = store.getSnapshot(p.snapshotId);
+      if (ps?.data) {
+        row.snapshotId = p.snapshotId; row.hash = p.hash; row.source = p.source || 'submitted';
+        row.note = reason;
+        return ps.data;
+      }
+    }
+    if (it.baseSnapshotId) {
+      const bs = store.getSnapshot(it.baseSnapshotId);
+      if (bs?.data) {
+        row.snapshotId = bs.id; row.hash = bs.hash; row.source = 'assigned';
+        row.note = reason;
+        return bs.data;
+      }
+    }
+    row.note = reason;
+    return null;
+  };
 
   for (const it of store.bookItems(book)) {
     const row = {
@@ -58,23 +78,23 @@ async function consolidate({ bookId, mode, by }) {
       baseSnapshotId: it.assigneeId ? it.baseSnapshotId || null : null, // mốc lúc giao: để "Chi tiết" liệt kê ô user đã đổi
     };
     let data = null;
+    const p = prevRows.get(it.id);
     if (!it.assigneeId) { data = it.data; row.source = 'admin'; }
     else if (core.FINAL.has(it.status)) {
-      if (mode === 'approved' && it.status !== 'approved') row.note = 'Chờ duyệt: không đưa vào';
+      if (mode === 'approved' && it.status !== 'approved') data = keepLastData(it, p, row, 'Chờ duyệt: giữ bản trước đó');
       else {
         const v = core.verify(it);
-        if (v.state !== 'ok') { row.source = 'tampered'; row.note = 'BỎ QUA: bài nộp không còn toàn vẹn'; }
+        if (v.state !== 'ok') { row.source = 'tampered'; data = keepLastData(it, p, row, 'Bài nộp không còn toàn vẹn: giữ bản trước đó'); }
         else { const sn = store.getSnapshot(it.submitSnapshotId); data = sn.data; row.snapshotId = sn.id; row.hash = sn.hash; row.source = it.status === 'approved' ? 'approved' : 'submitted'; }
       }
     } else if (mode === 'latest') { data = it.data; row.source = 'draft'; row.note = 'Bản nháp (chưa nộp)'; }
-    else row.note = 'Chưa nộp: không đưa vào';
+    else data = keepLastData(it, p, row, 'Chưa nộp: giữ số liệu trước đó');
     if (data) {
       row.included = true;
       if (!row.hash) row.hash = store.sha(store.canon(data));
       if (!row.snapshotId) row.snapshotId = store.snapshotByHash(it.id, row.hash) || store.createSnapshot(it, 'consolidation', by, row.hash, null);
       included.push({ it, data });
     }
-    const p = prevRows.get(it.id);
     row.changed = !!p && (p.hash !== row.hash || p.included !== row.included);
     row.isNew = !p && !!prev;
     rows.push(row);
