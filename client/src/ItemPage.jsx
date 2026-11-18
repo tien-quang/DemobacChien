@@ -10,6 +10,9 @@ import WordPane, { SheetPane } from './OnlyOfficeEditor.jsx';
 export default function ItemPage({ me, id }) {
   const [item, setItem] = useState(null);
   const [data, setData] = useState(null);
+  const [summaries, setSummaries] = useState([]);
+  const [summaryData, setSummaryData] = useState({});
+  const [activeView, setActiveView] = useState('work');
   const [pending, setPending] = useState(0);
   const [error, setError] = useState('');
   const [toast, flash] = useToast();
@@ -21,6 +24,14 @@ export default function ItemPage({ me, id }) {
   const load = async () => {
     const r = await api.get('/items/' + id);
     setItem(r.item); setData(r.data); sent.current = r.data; dataRef.current = r.data;
+    const mine = await api.get('/my-items');
+    const viewOnly = (mine || []).filter((x) => x.viewOnly);
+    const loaded = await Promise.all(viewOnly.map(async (x) => {
+      const s = await api.get('/items/' + x.id);
+      return { item: s.item, data: s.data };
+    }));
+    setSummaries(loaded);
+    setSummaryData(Object.fromEntries(loaded.map((x) => [x.item.id, x.data])));
   };
   useEffect(() => {
     load().catch((e) => setError(e.message));
@@ -28,6 +39,15 @@ export default function ItemPage({ me, id }) {
     const off = live.sub({ t: 'open', item: id }, { t: 'leave', item: id });
     return () => { off(); clearTimeout(curTimer.current); clearTimeout(fxTimer.current); };
   }, [id]); // eslint-disable-line
+
+  useEffect(() => {
+    if (!summaries.length) return undefined;
+    const offs = summaries.map((x) => live.sub(
+      { t: 'open', item: x.item.id },
+      { t: 'leave', item: x.item.id },
+    ));
+    return () => offs.forEach((off) => off());
+  }, [summaries]);
 
   useEffect(() => {
     const warn = (e) => { if (live.pendingCount()) { e.preventDefault(); e.returnValue = ''; } };
@@ -49,6 +69,14 @@ export default function ItemPage({ me, id }) {
         setCellFx(changed); clearTimeout(fxTimer.current);
         fxTimer.current = setTimeout(() => setCellFx(null), 2500);
         flash(`Bảng tổng hợp vừa thay đổi (${changed.size} ô).`);
+      }
+    } else if (m.t === 'summary') {
+      setSummaries((cur) => cur.map((x) => x.item.id === m.item ? { ...x, data: m.data } : x));
+      setSummaryData((cur) => ({ ...cur, [m.item]: m.data }));
+      if (activeView === m.item) {
+        setCellFx(new Set(Object.keys(m.data.cells || {})));
+        clearTimeout(fxTimer.current);
+        fxTimer.current = setTimeout(() => setCellFx(null), 2500);
       }
     }
   });
@@ -82,6 +110,8 @@ export default function ItemPage({ me, id }) {
   const wm = `${me.name} · ${me.username} · #${me.tag} · ${new Date().toLocaleDateString('vi-VN')}`;
   const admin = me.role === 'admin';
   const viewOnly = !!item.viewOnly;
+  const activeSummary = activeView !== 'work' ? summaries.find((x) => x.item.id === activeView) : null;
+  const activeSummaryData = activeSummary ? (summaryData[activeSummary.item.id] || activeSummary.data) : null;
   const notice = viewOnly ? 'Bảng tổng hợp (chỉ xem): số liệu tự cập nhật khi các bài được giao thay đổi. Ô vừa đổi sẽ nháy sáng.'
     : admin
     ? (item.status === 'approved' ? 'Đã duyệt: quản trị viên vẫn có thể chỉnh sửa' : item.status === 'submitted' ? 'Đã nộp: quản trị viên vẫn có thể chỉnh sửa' : 'Quản trị viên có thể chỉnh sửa')
@@ -99,8 +129,27 @@ export default function ItemPage({ me, id }) {
         {item.editable && !admin && <button className="submit" onClick={submit}>Nộp bài</button>}
       </div>
       {item.returnNote && item.editable && <div className="return-note"><b>Quản trị viên trả lại bài:</b> {item.returnNote}</div>}
+      {summaries.length > 0 && (
+        <div className="item-inline-tabs">
+          <button className={activeView === 'work' ? 'active' : ''} onClick={() => setActiveView('work')}>
+            Bài đang làm
+          </button>
+          {summaries.map((x) => (
+            <button key={x.item.id} className={activeView === x.item.id ? 'active' : ''} onClick={() => setActiveView(x.item.id)}>
+              {x.item.name} · Chỉ xem
+            </button>
+          ))}
+        </div>
+      )}
       <div className="docbody">
-        {viewOnly ? (
+        {activeSummary ? (
+          <Spreadsheet
+            key={activeSummary.item.id} sheetName={activeSummary.item.name} data={activeSummaryData} others={{}} editable={false} restricted
+            protect={activeSummary.item.protect} watermark={wm}
+            notice="Bảng tổng hợp (chỉ xem): số liệu tự cập nhật trong cùng trang khi các bài được giao thay đổi."
+            flash={activeView === activeSummary.item.id ? cellFx : null} onBlocked={flash} onChange={() => {}}
+          />
+        ) : viewOnly ? (
           <Spreadsheet
             key={item.id} sheetName={item.name} data={data} others={{}} editable={false} restricted
             protect={item.protect} watermark={wm} notice={notice} flash={cellFx} onBlocked={flash} onChange={() => {}}
