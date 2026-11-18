@@ -55,7 +55,10 @@ export default function ItemPage({ me, id }) {
     } else if (m.t === 'summary') {
       if (!m.rev || summaryRevs.current[m.item] === m.rev) return;
       summaryRevs.current[m.item] = m.rev;
-      api.post(`/items/${id}/onlyoffice/flush`).catch(() => {}).finally(() => setSheetRevision((n) => n + 1));
+      api.post(`/items/${id}/onlyoffice/flush`).catch(() => {}).finally(async () => {
+        await load().catch(() => {});
+        setSheetRevision((n) => n + 1);
+      });
     }
   });
 
