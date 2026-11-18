@@ -4,7 +4,7 @@ import { live } from './live.js';
 import { diffGrid } from './diff.js';
 import { go, useLive, useToast, deadlineText, ConnDot, STATUS } from './util.jsx';
 import Spreadsheet from './Spreadsheet.jsx';
-import WordPane, { SheetPane } from './OnlyOfficeEditor.jsx';
+import WordPane, { SheetPane, OnlyOfficeEditor } from './OnlyOfficeEditor.jsx';
 
 // Workbook nhỏ của user: cửa sổ độc lập, chỉ chứa đúng 1 bảng, không có tab/sheet/workbook nào khác.
 export default function ItemPage({ me, id }) {
@@ -13,6 +13,7 @@ export default function ItemPage({ me, id }) {
   const [summaries, setSummaries] = useState([]);
   const [summaryData, setSummaryData] = useState({});
   const [activeView, setActiveView] = useState('work');
+  const [summaryRevisions, setSummaryRevisions] = useState({});
   const [pending, setPending] = useState(0);
   const [error, setError] = useState('');
   const [toast, flash] = useToast();
@@ -73,6 +74,7 @@ export default function ItemPage({ me, id }) {
     } else if (m.t === 'summary') {
       setSummaries((cur) => cur.map((x) => x.item.id === m.item ? { ...x, data: m.data } : x));
       setSummaryData((cur) => ({ ...cur, [m.item]: m.data }));
+      setSummaryRevisions((cur) => ({ ...cur, [m.item]: (cur[m.item] || 0) + 1 }));
       if (activeView === m.item) {
         setCellFx(new Set(Object.keys(m.data.cells || {})));
         clearTimeout(fxTimer.current);
@@ -112,21 +114,22 @@ export default function ItemPage({ me, id }) {
   const viewOnly = !!item.viewOnly;
   const activeSummary = activeView !== 'work' ? summaries.find((x) => x.item.id === activeView) : null;
   const activeSummaryData = activeSummary ? (summaryData[activeSummary.item.id] || activeSummary.data) : null;
+  const activeViewOnly = !!activeSummary || viewOnly;
   const notice = viewOnly ? 'Bảng tổng hợp (chỉ xem): số liệu tự cập nhật khi các bài được giao thay đổi. Ô vừa đổi sẽ nháy sáng.'
     : admin
     ? (item.status === 'approved' ? 'Đã duyệt: quản trị viên vẫn có thể chỉnh sửa' : item.status === 'submitted' ? 'Đã nộp: quản trị viên vẫn có thể chỉnh sửa' : 'Quản trị viên có thể chỉnh sửa')
     : item.status === 'approved' ? 'Đã được duyệt: chỉ xem' : item.status === 'submitted' ? 'Đã nộp, chờ duyệt: chỉ xem' : item.pastDue ? 'Quá hạn nộp: chỉ xem' : !item.editable ? 'Chỉ xem' : '';
   return (
     <div className="docpage">
-      <div className={'titlebar ' + item.type}>
+      <div className={'titlebar ' + (activeSummary ? 'excel' : item.type)}>
         <button className="ghost" onClick={() => go('#/')}>Quay lại</button>
-        <span className="doctitle-bar">{item.name}</span>
-        {viewOnly ? <span className="tag light approved">Chỉ xem · bảng tổng hợp</span> : <span className={'tag light ' + item.status}>{STATUS[item.status]}</span>}
-        {!viewOnly && item.deadline && <span className={'savemsg' + (item.pastDue ? ' late-w' : '')}>{deadlineText(item.deadline)}</span>}
+        <span className="doctitle-bar">{activeSummary ? activeSummary.item.name : item.name}</span>
+        {activeViewOnly ? <span className="tag light approved">Chỉ xem · bảng tổng hợp</span> : <span className={'tag light ' + item.status}>{STATUS[item.status]}</span>}
+        {!activeViewOnly && item.deadline && <span className={'savemsg' + (item.pastDue ? ' late-w' : '')}>{deadlineText(item.deadline)}</span>}
         <span className="grow" />
-        {item.editable && <span className="savemsg">{pending ? 'Đang gửi…' : 'Đã lưu trên máy chủ'}</span>}
+        {!activeViewOnly && item.editable && <span className="savemsg">{pending ? 'Đang gửi…' : 'Đã lưu trên máy chủ'}</span>}
         <ConnDot />
-        {item.editable && !admin && <button className="submit" onClick={submit}>Nộp bài</button>}
+        {!activeViewOnly && item.editable && !admin && <button className="submit" onClick={submit}>Nộp bài</button>}
       </div>
       {item.returnNote && item.editable && <div className="return-note"><b>Quản trị viên trả lại bài:</b> {item.returnNote}</div>}
       {summaries.length > 0 && (
@@ -143,17 +146,13 @@ export default function ItemPage({ me, id }) {
       )}
       <div className="docbody">
         {activeSummary ? (
-          <Spreadsheet
-            key={activeSummary.item.id} sheetName={activeSummary.item.name} data={activeSummaryData} others={{}} editable={false} restricted
-            protect={activeSummary.item.protect} watermark={wm}
+          <OnlyOfficeEditor
+            key={`${activeSummary.item.id}-${summaryRevisions[activeSummary.item.id] || 0}`}
+            itemId={activeSummary.item.id}
             notice="Bảng tổng hợp (chỉ xem): số liệu tự cập nhật trong cùng trang khi các bài được giao thay đổi."
-            flash={activeView === activeSummary.item.id ? cellFx : null} onBlocked={flash} onChange={() => {}}
           />
         ) : viewOnly ? (
-          <Spreadsheet
-            key={item.id} sheetName={item.name} data={data} others={{}} editable={false} restricted
-            protect={item.protect} watermark={wm} notice={notice} flash={cellFx} onBlocked={flash} onChange={() => {}}
-          />
+          <OnlyOfficeEditor key={`${item.id}-${summaryRevisions[item.id] || 0}`} itemId={item.id} notice={notice} />
         ) : item.type === 'excel' ? (
           <SheetPane key={item.id} id={item.id} editable={item.editable} notice={notice} rev={item.protect && item.protect.rev}>
             <Spreadsheet

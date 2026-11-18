@@ -23,7 +23,7 @@ const loadScript = (src) => {
   return scripts.get(src);
 };
 
-function OnlyOfficeEditor({ itemId, notice, watch }) {
+export function OnlyOfficeEditor({ itemId, notice, watch }) {
   const holder = useRef(null);
   const [err, setErr] = useState('');
   const [ready, setReady] = useState(false);
