@@ -71,23 +71,31 @@ module.exports = function attach(server) {
     if (dirtyBooks.has(bookId)) return;
     dirtyBooks.set(bookId, setTimeout(() => { dirtyBooks.delete(bookId); pushSummaries(bookId); }, 400));
   }
+  // Gửi bảng tổng hợp cho 1 kết nối. Nếu người này đang mở sheet nguồn CỦA MÌNH thì gửi bản "lai" (phần trỏ tới sheet của họ giữ công thức sống,
+  // phần của người khác là số liệu hiện tại). Chỉ gửi khi rev đổi (rev chỉ đổi khi số liệu của người khác đổi) trừ khi force.
+  function sendSummary(ws, summary, force) {
+    const ownId = ws.sumOwn.get(summary.id);
+    let r;
+    try { r = core.summaryFor(summary, ws.user, ownId ? store.items.get(ownId) : null); } catch (e) { console.error('[summary]', e.message); return; }
+    if (!force && ws.sumRev.get(summary.id) === r.rev) return;
+    ws.sumRev.set(summary.id, r.rev);
+    send(ws, { t: 'summary', item: summary.id, data: r.data, rev: r.rev, live: r.live });
+  }
+  const watchSummary = (ws, summary, ownId) => {
+    ws.views.add(summary.id); add(viewRooms, summary.id, ws);
+    if (ownId) ws.sumOwn.set(summary.id, ownId); else ws.sumOwn.delete(summary.id);
+    ws.sumRev.delete(summary.id);
+  };
+  const unwatchSummary = (ws, id) => { ws.views.delete(id); ws.sumOwn.delete(id); ws.sumRev.delete(id); del(viewRooms, id, ws); };
   function pushSummaries(bookId) {
     const b = store.books.get(bookId);
     if (!b) return;
     for (const id of b.itemIds) {
       const set = viewRooms.get(id), it = store.items.get(id);
       if (!set || !set.size || !it) continue;
-      let data = null;
-      let rev = null;
       for (const ws of [...set]) {
-        if (!core.perm(ws.user, it).viewer) { ws.views.delete(id); del(viewRooms, id, ws); continue; } // quyền đã bị thu hồi
-        try {
-          if (!data) {
-            data = core.viewerData(it);
-            rev = store.sha(store.canon(data));
-          }
-        } catch (e) { console.error('[summary]', e.message); return; }
-        send(ws, { t: 'summary', item: id, data, rev });
+        if (!core.perm(ws.user, it).viewer) { unwatchSummary(ws, id); continue; } // quyền đã bị thu hồi
+        sendSummary(ws, it, false);
       }
     }
   }
@@ -96,7 +104,7 @@ module.exports = function attach(server) {
     added.forEach((uid) => toUser(uid, { t: 'status', item: core.userView(item, store.user(uid)) })); // trang chủ của user nạp lại danh sách
     removed.forEach((uid) => {
       toUser(uid, { t: 'status', item: item.id, revoked: true });
-      (byUser.get(uid) || new Set()).forEach((ws) => { ws.views.delete(item.id); del(viewRooms, item.id, ws); });
+      (byUser.get(uid) || new Set()).forEach((ws) => unwatchSummary(ws, item.id));
     });
     toAdmins(item.bookId, { t: 'status', item: core.adminView(item) });
   });
@@ -114,7 +122,7 @@ module.exports = function attach(server) {
     const user = session && store.user(session.userId);
     if (!user) return deny(401, 'Unauthorized');
     wss.handleUpgrade(req, socket, head, (ws) => {
-      ws.user = user; ws.session = session; ws.alive = true; ws.rooms = new Set(); ws.watching = new Set(); ws.views = new Set();
+      ws.user = user; ws.session = session; ws.alive = true; ws.rooms = new Set(); ws.watching = new Set(); ws.views = new Set(); ws.sumOwn = new Map(); ws.sumRev = new Map();
       ws.ip = req.socket.remoteAddress; ws.tokens = 80; ws.tick = Date.now();
       add(byUser, user.id, ws);
       wss.emit('connection', ws);
@@ -160,24 +168,20 @@ module.exports = function attach(server) {
       }
       case 'open': { // người được giao mở workbook nhỏ của mình (để admin thấy trạng thái trực tuyến)
         const it = core.getReadable(user, String(m.item), ws.ip);
-        if (!core.isAdmin(user) && it.assigneeId === user.id) {
+        if (!core.isAdmin(user) && it.assigneeId === user.id && it.type === 'excel') { // đang làm sheet của mình: theo dõi các bảng tổng hợp được xem
           const book = store.books.get(it.bookId);
           if (book) {
             for (const summary of store.bookItems(book)) {
-              if (summary.type !== 'excel' || summary.id === it.id) continue;
-              if (!(summary.viewerIds || []).includes(user.id)) continue;
-              ws.views.add(summary.id);
-              add(viewRooms, summary.id, ws);
-              const data = core.viewerData(summary);
-              send(ws, { t: 'summary', item: summary.id, data, rev: store.sha(store.canon(data)) });
+              if (summary.type !== 'excel' || summary.id === it.id || !(summary.viewerIds || []).includes(user.id)) continue;
+              watchSummary(ws, summary, it.id);
+              ws.sumRev.set(summary.id, core.summaryFor(summary, user, it).rev); // bản đầu đã có trong phản hồi GET /items/:id, không gửi lại
             }
           }
         }
         if (core.isAdmin(user) || it.assigneeId !== user.id) {
           if (core.perm(user, it).viewer) { // người chỉ xem bảng tổng hợp: đăng ký nhận giá trị mới; gửi luôn bản mới nhất (bù thay đổi đã lỡ khi mất kết nối)
-            ws.views.add(it.id); add(viewRooms, it.id, ws);
-            const data = core.viewerData(it);
-            send(ws, { t: 'summary', item: it.id, data, rev: store.sha(store.canon(data)) });
+            watchSummary(ws, it, null);
+            sendSummary(ws, it, true);
           }
           return send(ws, { t: 'opened', item: it.id });
         }
@@ -207,7 +211,8 @@ module.exports = function attach(server) {
       }
       case 'leave':
         if (ws.rooms.has(String(m.item))) leaveRoom(ws, String(m.item));
-        if (ws.views.has(String(m.item))) { ws.views.delete(String(m.item)); del(viewRooms, String(m.item), ws); }
+        if (ws.views.has(String(m.item))) unwatchSummary(ws, String(m.item));
+        for (const [sid, oid] of [...ws.sumOwn]) if (oid === String(m.item)) unwatchSummary(ws, sid); // rời sheet của mình thì thôi theo dõi tổng hợp kèm theo
         return undefined;
       case 'ping': return send(ws, { t: 'pong' });
       default: return undefined;

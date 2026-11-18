@@ -2,7 +2,7 @@
 const EventEmitter = require('events');
 const store = require('./store');
 const { cleanCell, keyOK, cleanWidths, cleanDim, MAX_CELLS } = require('./excel');
-const { materialize } = require('./formula');
+const { materialize, makeEvaluator } = require('./formula');
 
 const bus = new EventEmitter();
 const isAdmin = (u) => u.role === 'admin';
@@ -69,6 +69,102 @@ function viewerData(it) {
     cells[k] = rest;
   }
   return { ...it.data, cells };
+}
+
+// ---------- bảng tổng hợp "lai" cho người VỪA làm 1 sheet nguồn VỪA được xem tổng hợp ----------
+// Mục tiêu: user sửa sheet của mình (ví dụ tổng nợ 2 triệu -> 4 triệu) thì bảng tổng hợp họ đang xem đổi theo NGAY khi gõ, không chờ lưu / tải lại.
+// Cách làm: trong công thức của bảng tổng hợp, phần trỏ tới sheet CỦA CHÍNH user được giữ nguyên (trình soạn thảo tự tính lại tức thì),
+// còn phần trỏ tới sheet của NGƯỜI KHÁC được thay bằng số liệu hiện tại của họ (chỉ giá trị, không lộ tên/ nội dung sheet đó).
+const SHEET_REF = /('(?:[^']|'')+'|[^\s!'"(),;:+\-*\/^&=<>{}[\]]+)!(\$?[A-Za-z]{1,3}\$?\d+)(?::(\$?[A-Za-z]{1,3}\$?\d+))?/g;
+const MAX_RANGE = 400;
+function splitStrings(f) { // tách công thức thành đoạn trong / ngoài dấu nháy kép (không đụng vào chuỗi chữ)
+  const out = [];
+  let i = 0, cur = '';
+  while (i < f.length) {
+    if (f[i] !== '"') { cur += f[i++]; continue; }
+    if (cur) { out.push({ text: cur, str: false }); cur = ''; }
+    let j = i + 1;
+    while (j < f.length) { if (f[j] === '"') { if (f[j + 1] === '"') { j += 2; continue; } break; } j++; }
+    out.push({ text: f.slice(i, j + 1), str: true });
+    i = j + 1;
+  }
+  if (cur) out.push({ text: cur, str: false });
+  return out;
+}
+const refRC = (a) => { const m = /^\$?([A-Za-z]{1,3})\$?(\d+)$/.exec(a); return [Number(m[2]) - 1, colIndex(m[1].toUpperCase())]; };
+const literal = (v) => {
+  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : null;
+  if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
+  if (typeof v === 'string' && v !== '' && !v.startsWith('#')) return '"' + v.replace(/"/g, '""') + '"';
+  return null; // trống, lỗi: không thay được an toàn
+};
+// Trả { f, keep } nếu thay được; null nếu phải chuyển ô thành giá trị tĩnh (không thay an toàn)
+function substituteForeign(formula, ownName, lookup, valueAt) {
+  let ok = true, usesOwn = false;
+  const parts = splitStrings(formula).map((seg) => {
+    if (seg.str) return seg.text;
+    return seg.text.replace(SHEET_REF, (m, sh, a, b) => {
+      const name = sh.startsWith("'") ? sh.slice(1, -1).replace(/''/g, "'") : sh;
+      if (name.toLowerCase() === ownName.toLowerCase()) { usesOwn = true; return m; } // sheet của chính user: giữ công thức sống
+      const real = lookup(name);
+      if (!real) { ok = false; return m; }
+      const [r1, c1] = refRC(a);
+      if (!b) { const lit = literal(valueAt(real, r1, c1)); if (lit === null) { ok = false; return m; } return lit; }
+      const [r2, c2] = refRC(b);
+      const R1 = Math.min(r1, r2), R2 = Math.max(r1, r2), C1 = Math.min(c1, c2), C2 = Math.max(c1, c2);
+      if ((R2 - R1 + 1) * (C2 - C1 + 1) > MAX_RANGE) { ok = false; return m; }
+      const rows = [];
+      for (let r = R1; r <= R2; r++) {
+        const row = [];
+        for (let c = C1; c <= C2; c++) { const lit = literal(valueAt(real, r, c)); if (lit === null) { ok = false; return m; } row.push(lit); }
+        rows.push(row.join(','));
+      }
+      return '{' + rows.join(';') + '}';
+    });
+  });
+  if (!ok) return null;
+  const f = parts.join('');
+  const bare = splitStrings(f).filter((s) => !s.str).map((s) => s.text).join(' ');
+  const hasRef = /(?<![A-Za-z0-9_!'.])\$?[A-Z]{1,3}\$?\d+(?![A-Za-z0-9_(])/i.test(bare.replace(/\{[^}]*\}/g, ''));
+  return { f, keep: usesOwn || hasRef };
+}
+
+// Bảng tổng hợp mà user được xem. own = sheet user đang làm (nếu có): công thức trỏ tới own giữ nguyên để tính lại tức thì.
+// Trả { data, rev, live }. rev chỉ đổi khi số liệu của NGƯỜI KHÁC đổi (user tự sửa sheet mình không làm rev đổi, nên không bị tải lại giữa chừng).
+function summaryFor(summary, user, own) {
+  if (!own || own.type !== 'excel' || own.id === summary.id) {
+    const data = viewerData(summary);
+    return { data, rev: store.sha(store.canon(data)), live: false };
+  }
+  const book = store.books.get(summary.bookId);
+  const all = {}, lower = {};
+  for (const o of store.bookItems(book)) if (o.type === 'excel' && o.id !== summary.id) { all[o.name] = o.data.cells; lower[o.name.toLowerCase()] = o.name; }
+  const evs = {};
+  const valueAt = (name, r, c) => (evs[name] ||= makeEvaluator(name, all[name], all)).valueAt(r, c);
+  const hidden = new Set(hiddenKeys(summary));
+  // Sheet của user có ô bị ẩn: trình soạn thảo của họ không có số thật của ô ẩn nên tự tính sẽ SAI. Khi đó thay mọi số bằng giá trị đúng từ máy chủ (không sống).
+  const ownName = hiddenKeys(own).length ? '\u0000' : own.name;
+  const mat = materialize(summary.data, summary.name, all).cells;
+  const cells = {};
+  for (const [k, c] of Object.entries(summary.data.cells)) {
+    const { f, ...rest } = c;
+    if (hidden.has(k) || (f && formulaUsesHidden(f, hidden))) { if (c.s) cells[k] = { s: c.s }; continue; }
+    if (!f) { cells[k] = c; continue; }
+    const v = mat[k].v;
+    const sub = substituteForeign(f, ownName, (n) => lower[n.toLowerCase()], valueAt);
+    cells[k] = sub && sub.keep ? { ...rest, f: sub.f, v } : { ...rest, v };
+  }
+  const fingerprint = Object.entries(cells).sort(([a], [b]) => (a < b ? -1 : 1)).map(([k, c]) => [k, c.f ? c.f : c.v ?? null, c.s || null]);
+  return { data: { ...summary.data, cells }, rev: store.sha(store.canon(fingerprint)), live: ownName === own.name };
+}
+// Các bảng tổng hợp user được xem, dùng khi user mở sheet `it` của mình
+function summariesFor(user, it) {
+  if (!user || isAdmin(user) || it.type !== 'excel' || it.assigneeId !== user.id) return [];
+  const book = store.books.get(it.bookId);
+  if (!book) return [];
+  return store.bookItems(book)
+    .filter((s) => s.type === 'excel' && s.id !== it.id && (s.viewerIds || []).includes(user.id))
+    .map((s) => ({ id: s.id, name: s.name, ...summaryFor(s, user, it) }));
 }
 
 // Những sheet nguồn mà công thức của bảng tổng hợp này lấy số liệu (và ai đang làm sheet đó): gợi ý cấp quyền xem cho đúng người
@@ -341,7 +437,7 @@ function setViewers(user, id, userIds, ip) {
 }
 
 module.exports = {
-  setViewers, relatedSources, viewerData,
+  setViewers, relatedSources, viewerData, summaryFor, summariesFor,
   bus, HttpError, E, perm, isAdmin, getReadable, userView, adminView, protectView, hiddenKeys, dataFor,
   applyEdit, markOpened, submit, approve, reopen, verify, FINAL, assign, setProtect, emitStatus,
 };

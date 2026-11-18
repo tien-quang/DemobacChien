@@ -120,16 +120,11 @@ function trackKey(itemId, key) {
 // Vai trò (variant): word = cả admin và user chung 1 phiên; excel: a = admin (đủ quyền), u = người được giao (khóa/ẩn ô).
 const sessions = new Map(); // `${itemId}|${variant}` -> { key, rev, context }
 function summaryContext(it, user) {
-  if (it.type !== 'excel' || core.isAdmin(user)) return '';
+  if (!user || it.type !== 'excel' || core.isAdmin(user)) return '';
   const book = store.books.get(it.bookId);
   if (!book) return '';
-  const summaries = [];
-  for (const summary of store.bookItems(book)) {
-    if (summary.type === 'excel' && summary.id !== it.id && (summary.viewerIds || []).includes(user.id)) {
-      summaries.push({ id: summary.id, data: core.viewerData(summary) });
-    }
-  }
-  return store.sha(store.canon(summaries));
+  // chỉ phụ thuộc rev (số liệu của người KHÁC): user tự lưu sheet của mình không làm đổi khóa phiên
+  return store.sha(store.canon(core.summariesFor(user, it).map((s) => [s.id, s.rev])));
 }
 function sessionKey(it, variant, rev, context = '') {
   const sk = `${it.id}|${variant}`;
@@ -241,12 +236,14 @@ async function buildXlsx(it, user) {
   if (!core.isAdmin(user)) {
     const book = store.books.get(it.bookId);
     if (book) {
+      // Bảng tổng hợp được xem: bản "lai": phần trỏ tới sheet của chính user vẫn là công thức nên đổi NGAY khi họ gõ (không cần lưu/tải lại)
+      const own = it.assigneeId === user.id ? it : null;
       for (const summary of store.bookItems(book)) {
         if (summary.id === it.id || summary.type !== 'excel') continue;
         if (!(summary.viewerIds || []).includes(user.id)) continue;
         parts.push({
           name: summary.name,
-          data: core.viewerData(summary),
+          data: core.summaryFor(summary, user, own).data,
           protect: { unlock: [], password: store.sign('summarypw|' + summary.id) },
         });
       }

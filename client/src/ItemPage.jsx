@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { api } from './api.js';
 import { live } from './live.js';
 import { diffGrid } from './diff.js';
@@ -17,18 +17,25 @@ export default function ItemPage({ me, id }) {
   const sent = useRef(null);
   const cur = useRef(null), curTimer = useRef(null);
   const dataRef = useRef(null), fxTimer = useRef(null);
-  const summaryRevs = useRef({});
+  const summaryRevs = useRef({}), reloadTimer = useRef(null);
+  const [summaries, setSummaries] = useState([]); // bảng tổng hợp user được xem (kèm sheet của mình)
+  const [ooOn, setOoOn] = useState(null);         // ONLYOFFICE bật? (tắt: hiện thêm tab tổng hợp tính ngay trên trình duyệt)
+  const [tab, setTab] = useState('own');
+  const [sumFx, setSumFx] = useState({});
   const [cellFx, setCellFx] = useState(null); // ô vừa đổi trên bảng tổng hợp (nháy sáng)
 
   const load = async () => {
     const r = await api.get('/items/' + id);
     setItem(r.item); setData(r.data); sent.current = r.data; dataRef.current = r.data;
+    setSummaries(r.summaries || []);
+    summaryRevs.current = Object.fromEntries((r.summaries || []).map((s) => [s.id, s.rev])); // rev gốc: chỉ khi rev đổi (người khác đổi số) mới cần nạp lại
   };
   useEffect(() => {
     load().catch((e) => setError(e.message));
+    api.get('/onlyoffice/status').then((r) => setOoOn(!!r.enabled)).catch(() => setOoOn(false));
     live.connect();
     const off = live.sub({ t: 'open', item: id }, { t: 'leave', item: id });
-    return () => { off(); clearTimeout(curTimer.current); clearTimeout(fxTimer.current); };
+    return () => { off(); clearTimeout(curTimer.current); clearTimeout(fxTimer.current); clearTimeout(reloadTimer.current); };
   }, [id]); // eslint-disable-line
 
   useEffect(() => {
@@ -53,12 +60,31 @@ export default function ItemPage({ me, id }) {
         flash(`Bảng tổng hợp vừa thay đổi (${changed.size} ô).`);
       }
     } else if (m.t === 'summary') {
+      // Người KHÁC vừa đổi số liệu nên bảng tổng hợp kèm theo sheet của mình đổi. (User tự sửa sheet mình thì bảng tổng hợp tự tính lại ngay, không có tin này.)
       if (!m.rev || summaryRevs.current[m.item] === m.rev) return;
       summaryRevs.current[m.item] = m.rev;
-      api.post(`/items/${id}/onlyoffice/flush`).catch(() => {}).finally(async () => {
-        await load().catch(() => {});
-        setSheetRevision((n) => n + 1);
-      });
+      if (ooOn === false) { // trình duyệt tự tính: chỉ cần thay dữ liệu, không tải lại gì cả
+        setSummaries((list) => list.map((s) => {
+          if (s.id !== m.item) return s;
+          const changed = new Set();
+          for (const k of new Set([...Object.keys(s.data.cells), ...Object.keys(m.data.cells)])) if (JSON.stringify(s.data.cells[k]?.v ?? null) !== JSON.stringify(m.data.cells[k]?.v ?? null)) changed.add(k);
+          if (changed.size) {
+            setSumFx((f) => ({ ...f, [s.id]: changed }));
+            setTimeout(() => setSumFx((f) => ({ ...f, [s.id]: null })), 2500);
+            flash(`Bảng tổng hợp "${s.name}" vừa đổi do số liệu của người khác (${changed.size} ô).`);
+          }
+          return { ...s, data: m.data, rev: m.rev };
+        }));
+      } else { // ONLYOFFICE: lưu phần đang gõ rồi nạp lại file (gộp các tin dồn dập trong 1,5 giây để không làm gián đoạn)
+        clearTimeout(reloadTimer.current);
+        reloadTimer.current = setTimeout(() => {
+          api.post(`/items/${id}/onlyoffice/flush`).catch(() => {}).finally(async () => {
+            await load().catch(() => {});
+            setSheetRevision((n) => n + 1);
+            flash('Số liệu tổng hợp vừa được cập nhật do người khác thay đổi.');
+          });
+        }, 1500);
+      }
     }
   });
 
@@ -85,6 +111,8 @@ export default function ItemPage({ me, id }) {
     } catch (e) { flash(e.message); }
   };
 
+  const ownOthers = useMemo(() => (item && data?.cells ? { [item.name]: data.cells } : {}), [item?.name, data?.cells]); // sheet của mình, dữ liệu sống: tổng hợp tính lại ngay khi gõ
+  const sumTab = summaries.find((s) => s.id === tab);
   if (error) return <div className="wrap"><p className="err">{error}</p><button onClick={() => go('#/')}>Về danh sách</button></div>;
   if (!item || !data) return <div className="wrap muted">Đang tải…</div>;
 
@@ -116,6 +144,12 @@ export default function ItemPage({ me, id }) {
               protect={item.protect} watermark={wm} notice={notice} flash={cellFx} onBlocked={flash} onChange={() => {}}
             />
           </SheetPane>
+        ) : sumTab && ooOn === false ? (
+          <Spreadsheet
+            key={'sum-' + sumTab.id} sheetName={sumTab.name} data={sumTab.data} others={ownOthers} editable={false} restricted
+            protect={{ on: false, cells: {} }} watermark={wm} flash={sumFx[sumTab.id]} onBlocked={flash}
+            notice={`Bảng tổng hợp (chỉ xem): đổi ngay khi bạn sửa sheet "${item.name}" và khi người khác đổi số liệu của họ.`} onChange={() => {}}
+          />
         ) : item.type === 'excel' ? (
           <SheetPane key={`${item.id}-${sheetRevision}`} id={item.id} editable={item.editable} notice={notice} rev={item.protect && item.protect.rev}>
             <Spreadsheet
@@ -127,6 +161,12 @@ export default function ItemPage({ me, id }) {
           <WordPane key={item.id} id={item.id} html={data.html} editable={item.editable} restricted watermark={wm} notice={notice} onChange={onWord} />
         )}
       </div>
+      {!viewOnly && ooOn === false && summaries.length > 0 && (
+        <div className="tabsbar">
+          <button className={'stab' + (tab === 'own' ? ' on' : '')} onClick={() => setTab('own')}><b>{item.name}</b><small>bài của bạn</small></button>
+          {summaries.map((s) => <button key={s.id} className={'stab' + (tab === s.id ? ' on' : '')} onClick={() => setTab(s.id)}><b>{s.name}</b><small>tổng hợp · chỉ xem</small></button>)}
+        </div>
+      )}
       {toast && <div className="toast">{toast}</div>}
     </div>
   );

@@ -392,7 +392,7 @@ app.get('/api/items/:id', (req, res) => {
   core.markOpened(req.user, it);
   A(req, 'open', it.id);
   const view = core.userView(it, req.user);
-  res.json({ item: core.isAdmin(req.user) ? { ...view, ...core.adminView(it) } : view, data: core.dataFor(req.user, it) }); // ô ẩn bị gỡ nội dung với user
+  res.json({ item: core.isAdmin(req.user) ? { ...view, ...core.adminView(it) } : view, data: core.dataFor(req.user, it), summaries: core.summariesFor(req.user, it) }); // ô ẩn bị gỡ nội dung với user; summaries: bảng tổng hợp được xem kèm sheet của mình
 });
 app.post('/api/items/:id/submit', async (req, res, next) => {
   try {

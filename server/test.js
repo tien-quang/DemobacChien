@@ -505,6 +505,53 @@ function totp(secret, off = 0) {
     // user7 vẫn làm được bài của mình sau khi nâng cấp (không bị ảnh hưởng bởi quyền xem)
     ok((await u7.get(`/api/items/${G1.id}`)).data.item.viewOnly === false, 'người làm bài không bị đánh dấu chỉ xem');
     w7g.close();
+
+    console.log('\n[14] User sửa sheet của mình thì bảng tổng hợp họ xem đổi NGAY; người khác đổi thì họ cũng thấy');
+    const { makeEvaluator } = require('./formula');
+    const mkX = async (title, sheets) => {
+      const parts = Object.entries(sheets).map(([n, cells]) => ({ name: n, data: { rows: 50, cols: 6, colWidths: {}, cells } }));
+      return (await admin.post('/api/books/upload', Buffer.from(await exportXlsx({ parts })), { 'Content-Type': 'application/octet-stream', 'x-filename': encodeURIComponent(title + '.xlsx') })).data;
+    };
+    const bkN = await mkX('Tổng nợ test', {
+      S1: { '0,0': { v: 7 }, '0,1': { v: 2000000 } },
+      S2: { '0,0': { v: 10 }, '1,0': { v: 20 }, '2,0': { v: 30 }, '0,1': { v: 500000 } },
+      Tong: { '0,1': { f: 'S1!B1+S2!B1', v: 0 }, '1,1': { f: 'SUM(S2!A1:A3)+S1!A1', v: 0 }, '2,1': { f: 'S2!B1', v: 0 } },
+    });
+    const nI = await itemsOf(bkN.bookId);
+    const S1 = byName(nI, 'S1'), S2 = byName(nI, 'S2'), TONG = byName(nI, 'Tong');
+    await admin.put(`/api/books/${bkN.bookId}/assign`, { assignments: { [S1.id]: 'u8', [S2.id]: 'u7' } });
+    ok((await u8.get('/api/items/' + S1.id)).data.summaries.length === 0, 'chưa được gán xem: không có bảng tổng hợp đi kèm');
+    await admin.put(`/api/items/${TONG.id}/viewers`, { userIds: ['u8', 'u4'] });
+    const own0 = (await u8.get('/api/items/' + S1.id)).data;
+    ok(own0.summaries.length === 1 && own0.summaries[0].name === 'Tong' && own0.summaries[0].live === true, 'user8 (làm S1) mở bài: nhận kèm bảng tổng hợp Tong');
+    const T0 = own0.summaries[0], c0 = T0.data.cells;
+    ok(c0['0,1'].f === 'S1!B1+500000' && c0['0,1'].v === 2500000, 'phần của S1 (mình) giữ công thức sống, phần của S2 (người khác) chỉ còn số 500000', JSON.stringify(c0['0,1']));
+    ok(c0['1,1'].f === 'SUM({10;20;30})+S1!A1' && c0['1,1'].v === 67, 'vùng ô của người khác được thay bằng dãy số, công thức vẫn đúng', JSON.stringify(c0['1,1']));
+    ok(c0['2,1'].f === undefined && c0['2,1'].v === 500000, 'ô chỉ lấy số của người khác thành giá trị tĩnh (không còn công thức)', JSON.stringify(c0['2,1']));
+    ok(!JSON.stringify(own0.summaries).includes('S2!') && !JSON.stringify(own0.summaries).includes('S2'), 'không lộ tên sheet của người khác trong dữ liệu gửi cho user8');
+    const evT = makeEvaluator('Tong', c0, { S1: { '0,0': { v: 7 }, '0,1': { v: 4000000 } } });
+    ok(evT.valueAt(0, 1) === 4500000 && evT.valueAt(1, 1) === 67, 'dữ liệu gửi cho user8 tính lại ĐÚNG khi S1 đổi thành 4.000.000: Tong = 4.500.000');
+    const w8n = await u8.ws();
+    w8n.send(JSON.stringify({ t: 'open', item: S1.id }));
+    await sleep(500);
+    ok((await rpc(w8n, { t: 'edit', item: S1.id, patch: { '0,1': { v: 4000000 } } })).t === 'ack', 'user8 sửa S1: 2.000.000 → 4.000.000');
+    await sleep(1200);
+    ok(!w8n.msgs.some((j) => j.t === 'summary'), 'user8 tự sửa sheet mình: KHÔNG bị đẩy tin tải lại (trình soạn thảo tự tính, không giật)');
+    const own1 = (await u8.get('/api/items/' + S1.id)).data.summaries[0];
+    ok(own1.rev === T0.rev && own1.data.cells['0,1'].v === 4500000, 'máy chủ có số đúng 4.500.000 và rev không đổi (vì người khác chưa đổi gì)');
+    const w4n = await u4.ws();
+    w4n.send(JSON.stringify({ t: 'open', item: TONG.id }));
+    const v4 = await waitFor(w4n, (j) => j.t === 'summary' && j.item === TONG.id);
+    ok(v4 && v4.data.cells['0,1'].v === 4500000 && v4.data.cells['0,1'].f === undefined, 'người chỉ xem (user4) thấy Tong = 4.500.000, chỉ có giá trị');
+    ok((await rpc(wa, { t: 'edit', item: S2.id, patch: { '0,1': { v: 900000 } } })).t === 'ack', 'S2 (người khác) đổi 500.000 → 900.000');
+    const chgMsg = await waitFor(w8n, (j) => j.t === 'summary' && j.item === TONG.id, 3000);
+    ok(chgMsg && chgMsg.rev !== T0.rev && chgMsg.data.cells['0,1'].f === 'S1!B1+900000' && chgMsg.data.cells['0,1'].v === 4900000, 'user8 nhận bảng tổng hợp mới: phần của S2 thành 900.000, tổng = 4.900.000', JSON.stringify(chgMsg && chgMsg.data.cells['0,1']));
+    const v4b = await waitFor(w4n, (j) => j.t === 'summary' && j.item === TONG.id && j.data.cells['0,1'].v === 4900000, 3000);
+    ok(!!v4b, 'người chỉ xem cũng thấy 4.900.000 ngay');
+    await admin.put(`/api/items/${S1.id}/protect`, { hide: ['0,0'] });
+    const own2 = (await u8.get('/api/items/' + S1.id)).data.summaries[0];
+    ok(own2.live === false && !own2.data.cells['0,1'].f && own2.data.cells['0,1'].v === 4900000, 'sheet của user có ô ẩn: không để trình soạn thảo tự tính sai, gửi giá trị đúng từ máy chủ');
+    w8n.close(); w4n.close();
     lis.close();
     [w9, w10].forEach((w) => w.close());
     [wa, w1, w2, w3].forEach((w) => w.close());
