@@ -78,10 +78,16 @@ module.exports = function attach(server) {
       const set = viewRooms.get(id), it = store.items.get(id);
       if (!set || !set.size || !it) continue;
       let data = null;
+      let rev = null;
       for (const ws of [...set]) {
         if (!core.perm(ws.user, it).viewer) { ws.views.delete(id); del(viewRooms, id, ws); continue; } // quyền đã bị thu hồi
-        try { data = data || core.viewerData(it); } catch (e) { console.error('[summary]', e.message); return; }
-        send(ws, { t: 'summary', item: id, data });
+        try {
+          if (!data) {
+            data = core.viewerData(it);
+            rev = store.sha(store.canon(data));
+          }
+        } catch (e) { console.error('[summary]', e.message); return; }
+        send(ws, { t: 'summary', item: id, data, rev });
       }
     }
   }
@@ -162,14 +168,16 @@ module.exports = function attach(server) {
               if (!(summary.viewerIds || []).includes(user.id)) continue;
               ws.views.add(summary.id);
               add(viewRooms, summary.id, ws);
-              send(ws, { t: 'summary', item: summary.id, data: core.viewerData(summary) });
+              const data = core.viewerData(summary);
+              send(ws, { t: 'summary', item: summary.id, data, rev: store.sha(store.canon(data)) });
             }
           }
         }
         if (core.isAdmin(user) || it.assigneeId !== user.id) {
           if (core.perm(user, it).viewer) { // người chỉ xem bảng tổng hợp: đăng ký nhận giá trị mới; gửi luôn bản mới nhất (bù thay đổi đã lỡ khi mất kết nối)
             ws.views.add(it.id); add(viewRooms, it.id, ws);
-            send(ws, { t: 'summary', item: it.id, data: core.viewerData(it) });
+            const data = core.viewerData(it);
+            send(ws, { t: 'summary', item: it.id, data, rev: store.sha(store.canon(data)) });
           }
           return send(ws, { t: 'opened', item: it.id });
         }

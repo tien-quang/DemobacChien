@@ -17,6 +17,7 @@ export default function ItemPage({ me, id }) {
   const sent = useRef(null);
   const cur = useRef(null), curTimer = useRef(null);
   const dataRef = useRef(null), fxTimer = useRef(null);
+  const summaryRevs = useRef({});
   const [cellFx, setCellFx] = useState(null); // ô vừa đổi trên bảng tổng hợp (nháy sáng)
 
   const load = async () => {
@@ -52,6 +53,8 @@ export default function ItemPage({ me, id }) {
         flash(`Bảng tổng hợp vừa thay đổi (${changed.size} ô).`);
       }
     } else if (m.t === 'summary') {
+      if (!m.rev || summaryRevs.current[m.item] === m.rev) return;
+      summaryRevs.current[m.item] = m.rev;
       api.post(`/items/${id}/onlyoffice/flush`).catch(() => {}).finally(() => setSheetRevision((n) => n + 1));
     }
   });
