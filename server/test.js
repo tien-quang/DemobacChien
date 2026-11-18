@@ -449,6 +449,62 @@ function totp(secret, off = 0) {
     const wbx = new ExcelJS.Workbook(); await wbx.xlsx.load((await admin.get('/api' + xlsxLink.path)).data);
     const sheetNames = wbx.worksheets.map((w) => w.name);
     ok(sheetNames.includes('A1') && !sheetNames.includes('A2') && !sheetNames.includes('A3') && sheetNames[0] === 'Trạng thái nộp', 'file Excel tổng hợp chỉ chứa A1 (đã duyệt) và sheet trạng thái', sheetNames.join(','));
+
+    console.log('\n[13] Cấp quyền XEM bảng tổng hợp cho user, và liệt kê ô user đã đổi khi nộp bài');
+    const u4 = client(); await u4.login('user4', 'user123');
+    const sum = (await admin.get('/api/books/' + debt.id)).data.items.find((i) => i.name === 'Tổng hợp công nợ');
+    ok((await u4.get('/api/items/' + sum.id)).status === 404, 'chưa được cấp quyền: user4 không mở được bảng tổng hợp (404)');
+    const vinfo = (await admin.get(`/api/items/${sum.id}/viewers`)).data;
+    ok(vinfo.related.some((r) => r.itemName === 'Nhóm khách hàng A' && r.userId === 'u6'), 'gợi ý đúng: user6 làm nhóm A, là nguồn số liệu của bảng tổng hợp', JSON.stringify(vinfo.related));
+    ok((await u4.put(`/api/items/${sum.id}/viewers`, { userIds: ['u4'] })).status === 403, 'user không tự cấp quyền xem cho mình');
+    ok((await admin.put(`/api/items/${sum.id}/viewers`, { userIds: ['u0'] })).status === 400, 'không cấp quyền xem cho tài khoản admin / không hợp lệ');
+    ok((await admin.put(`/api/items/${sum.id}/viewers`, { userIds: ['u4'] })).status === 200, 'admin cấp quyền xem bảng tổng hợp cho user4');
+    const w4 = await u4.ws();
+    w4.send(JSON.stringify({ t: 'open', item: sum.id }));
+    ok(!!(await waitFor(w4, (j) => j.t === 'summary' && j.item === sum.id)), 'user4 mở bảng: nhận ngay giá trị mới nhất qua WebSocket');
+    const mine4 = (await u4.get('/api/my-items')).data;
+    ok(mine4.length === 1 && mine4[0].id === sum.id && mine4[0].viewOnly === true && mine4[0].editable === false, 'danh sách của user4 có bảng tổng hợp, đánh dấu chỉ xem', JSON.stringify(mine4));
+    const g4 = await u4.get('/api/items/' + sum.id), raw4 = JSON.stringify(g4.data);
+    ok(g4.status === 200 && g4.data.item.viewOnly === true && g4.data.item.editable === false, 'user4 mở được bảng tổng hợp ở chế độ chỉ xem');
+    ok(!/"f":/.test(raw4) && !raw4.includes('!H10') && !raw4.includes("'Nhóm"), 'chỉ nhận GIÁ TRỊ: không có công thức, không lộ tên sheet nguồn');
+    const cellA = g4.data.data.cells['4,1'];
+    ok(cellA && typeof cellA.v === 'number' && cellA.v > 0, 'giá trị tổng hợp nhóm A đã được máy chủ tính sẵn', JSON.stringify(cellA));
+    ok((await u4.get('/api/items/' + gA.id)).status === 404 && (await u4.get('/api/items/' + gB.id)).status === 404, 'vẫn KHÔNG mở được các sheet nguồn (404)');
+    ok((await u4.get(`/api/books/${debt.id}/data`)).status === 403 && (await u4.get(`/api/items/${sum.id}/export`)).status === 403, 'không tải được dữ liệu workbook lớn / file bảng tổng hợp');
+    ok((await rpc(w4, { t: 'edit', item: sum.id, patch: { '0,0': { v: 'sửa trộm' } } })).status === 403, 'người chỉ xem không sửa được bảng tổng hợp (403 ở máy chủ)');
+    ok((await u4.post(`/api/items/${sum.id}/submit`)).status === 403, 'người chỉ xem không nộp được');
+    const beforeA = cellA.v, beforeB = g4.data.data.cells['5,1'].v;
+    ok((await rpc(wa, { t: 'edit', item: gB.id, patch: { '4,3': { v: 37000000 } } })).t === 'ack', 'admin sửa 1 ô ở sheet nguồn (nhóm B)');
+    const upd = await waitFor(w4, (j) => j.t === 'summary' && j.item === sum.id && j.data.cells['5,1']?.v !== beforeB, 3000);
+    ok(!!upd, 'sheet nguồn đổi -> user4 thấy bảng tổng hợp đổi NGAY (không cần tải lại)');
+    ok(upd && upd.data.cells['4,1'].v === beforeA && !JSON.stringify(upd).includes('"f":'), 'ô không liên quan giữ nguyên, bản đẩy xuống cũng không có công thức');
+    await admin.put(`/api/items/${sum.id}/viewers`, { userIds: [] });
+    ok(!!(await waitFor(w4, (j) => j.t === 'status' && j.revoked && j.item === sum.id)), 'thu hồi quyền xem: user4 nhận thông báo ngay');
+    ok((await u4.get('/api/items/' + sum.id)).status === 404 && (await u4.get('/api/my-items')).data.length === 0, 'sau khi thu hồi user4 không còn thấy bảng tổng hợp');
+    w4.close();
+
+    // chi tiết ô đã đổi (dùng workbook riêng: các bài ở mục [9] đã bị cố ý xóa bản chụp để thử giả mạo)
+    const bkG = await mk('Hồ sơ Gamma', ['G1', 'G2']);
+    const G1 = byName(await itemsOf(bkG.bookId), 'G1');
+    await admin.put(`/api/books/${bkG.bookId}/assign`, { assignments: { [G1.id]: 'u7' } });
+    const w7g = await u7.ws();
+    ok((await rpc(w7g, { t: 'edit', item: G1.id, patch: { '1,1': { v: 5 }, '3,2': { v: 'abc' } } })).t === 'ack', 'user7 sửa 2 ô: B2 (1 → 5) và thêm ô C4');
+    ok((await u7.post(`/api/items/${G1.id}/submit`)).status === 200, 'user7 nộp bài');
+    await admin.post(`/api/books/${bkG.bookId}/consolidate`, {});
+    let consG = null;
+    for (let i = 0; i < 50 && !consG; i++) { consG = (await admin.get(`/api/books/${bkG.bookId}/consolidations`)).data.items[0]; if (!consG) await sleep(300); }
+    const chg = (await admin.get(`/api/books/${bkG.bookId}/consolidations/${consG.id}/changes`)).data;
+    const cG = chg.items[G1.id];
+    ok(cG && cG.base === 'lúc giao bài' && cG.total === 2, 'Chi tiết bản tổng hợp: liệt kê đúng 2 ô user7 đã đổi', JSON.stringify(cG));
+    ok(cG.list.some((x) => x.cell === 'B2' && x.from === '1' && x.to === '5' && x.change === 'edited'), 'thấy ô B2: 1 → 5');
+    ok(cG.list.some((x) => x.cell === 'C4' && x.from === '' && x.to === 'abc' && x.change === 'added'), 'thấy ô C4 mới nhập: (trống) → abc');
+    ok(chg.items[byName(await itemsOf(bkG.bookId), 'G2').id]?.total === 0, 'sheet chưa giao (G2, do admin quản lý) không có ô thay đổi nào');
+    ok((await u7.get(`/api/books/${bkG.bookId}/consolidations/${consG.id}/changes`)).status === 403, 'user thường không xem được chi tiết ô đã đổi');
+    const ich = (await admin.get(`/api/items/${G1.id}/changes`)).data;
+    ok(ich.total === 2 && ich.submitted === true, 'nút "Ô đã đổi" ở Tổng quan cũng thấy 2 ô (bản đã nộp)', JSON.stringify(ich));
+    // user7 vẫn làm được bài của mình sau khi nâng cấp (không bị ảnh hưởng bởi quyền xem)
+    ok((await u7.get(`/api/items/${G1.id}`)).data.item.viewOnly === false, 'người làm bài không bị đánh dấu chỉ xem');
+    w7g.close();
     lis.close();
     [w9, w10].forEach((w) => w.close());
     [wa, w1, w2, w3].forEach((w) => w.close());

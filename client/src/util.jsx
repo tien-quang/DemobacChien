@@ -27,10 +27,39 @@ export const deadlineText = (iso) => {
   return `Hạn nộp ${when}` + (h < 48 ? ` (còn ${h < 1 ? Math.max(1, Math.round(left / 60000)) + ' phút' : h + ' giờ'})` : '');
 };
 
-export function Modal({ title, onClose, children }) {
+// Danh sách ô user đã đổi so với lúc giao bài (dữ liệu từ /changes): ô, giá trị trước, giá trị sau
+export function ChangeList({ ch, max = 40 }) {
+  const [all, setAll] = useState(false);
+  if (!ch) return null;
+  if (ch.base === null) return <p className="small muted" style={{ margin: '2px 0' }}>{ch.note}</p>;
+  if (!ch.total) return <p className="small muted" style={{ margin: '2px 0' }}>Không có ô nào bị đổi so với {ch.base}{ch.formatOnly ? ` (${ch.formatOnly} ô chỉ đổi định dạng)` : ''}.</p>;
+  if (ch.word) return <p className="small" style={{ margin: '2px 0' }}><b>Nội dung văn bản đã được chỉnh sửa</b> so với {ch.base}.</p>;
+  const rows = all ? ch.list : ch.list.slice(0, max);
+  return (
+    <div className="changes">
+      <div className="small"><b>{ch.total} ô đã đổi</b> so với {ch.base}{ch.formatOnly ? ` · ${ch.formatOnly} ô chỉ đổi định dạng` : ''}</div>
+      <table className="list changes-tbl">
+        <thead><tr><th style={{ width: 70 }}>Ô</th><th>Trước</th><th>Sau</th></tr></thead>
+        <tbody>
+          {rows.map((x) => (
+            <tr key={x.cell}>
+              <td><code>{x.cell}</code></td>
+              <td>{x.from === '' ? <i className="muted">(trống)</i> : x.from}</td>
+              <td><b>{x.to === '' ? <i>(đã xóa)</i> : x.to}</b></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {ch.list.length > max && !all && <button onClick={() => setAll(true)}>Xem hết {ch.list.length} ô</button>}
+      {ch.truncated && <p className="small muted">Chỉ hiển thị {ch.list.length}/{ch.total} ô đầu tiên.</p>}
+    </div>
+  );
+}
+
+export function Modal({ title, onClose, children, wide }) {
   return (
     <div className="modal-back" onMouseDown={onClose}>
-      <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="modal" style={wide ? { width: 860 } : undefined} onMouseDown={(e) => e.stopPropagation()}>
         <div className="row"><h2 className="grow">{title}</h2><button onClick={onClose}>Đóng</button></div>
         {children}
       </div>

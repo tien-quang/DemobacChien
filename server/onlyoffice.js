@@ -311,6 +311,7 @@ async function saveExcelSerial(user, it, key, buf, ip) {
 // ---------- cấu hình trả về cho trình duyệt ----------
 async function editorConfig(user, itemId, ip, appOrigin, opts = {}) {
   const it = core.getReadable(user, itemId, ip);
+  if (!core.isAdmin(user) && it.assigneeId !== user.id) throw core.E(403, 'Chỉ người được giao mới mở được trình soạn thảo');
   if (!supported(it)) throw core.E(400, 'Chỉ dùng cho văn bản Word hoặc bảng tính');
   const isXl = it.type === 'excel';
   // Chế độ XEM TRỰC TIẾP (Live Viewer) cho admin: vào ĐÚNG phiên mà người được giao đang sửa (cùng file, cùng key) ở chế độ chỉ xem.
@@ -379,6 +380,7 @@ function mount(app) {
       const it = user && store.items.get(req.params.id);
       if (!supported(it)) return res.status(404).end();
       core.getReadable(user, it.id, req.ip); // người ký liên kết phải còn quyền đọc
+      if (!core.isAdmin(user) && it.assigneeId !== user.id) return res.status(403).end(); // người chỉ xem bảng tổng hợp không được tải file gốc (có công thức)
       const buf = await fileOf(it, user);
       res.set({ 'Content-Type': it.type === 'excel' ? XLSX_MIME : DOCX_MIME, 'Cache-Control': 'no-store', 'Content-Length': buf.length });
       res.send(buf);

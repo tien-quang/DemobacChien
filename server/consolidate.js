@@ -12,7 +12,6 @@ const safeName = (n) => n.replace(/[\\/?*[\]:]/g, '-').slice(0, 31);
 const STATUS_VN = { unassigned: 'Chưa giao', assigned: 'Đã giao', in_progress: 'Đang làm', submitted: 'Đã nộp', approved: 'Đã duyệt' };
 const MODE_VN = { submitted: 'bài đã nộp và đã duyệt', approved: 'chỉ bài đã duyệt', latest: 'gồm cả bản nháp' };
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const colName = (n) => { let s = ''; n++; while (n) { const q = (n - 1) % 26; s = String.fromCharCode(65 + q) + s; n = Math.floor((n - q) / 26); } return s; };
 
 function buildInWorker(workerData) {
   return new Promise((resolve, reject) => {
@@ -56,6 +55,7 @@ async function consolidate({ bookId, mode, by }) {
     const row = {
       itemId: it.id, name: it.name, type: it.type, assignee: it.assigneeId ? store.user(it.assigneeId)?.name : null,
       status: it.status, submittedAt: it.submittedAt, included: false, source: null, snapshotId: null, hash: null, note: '',
+      baseSnapshotId: it.assigneeId ? it.baseSnapshotId || null : null, // mốc lúc giao: để "Chi tiết" liệt kê ô user đã đổi
     };
     let data = null;
     if (!it.assigneeId) { data = it.data; row.source = 'admin'; }
@@ -77,28 +77,6 @@ async function consolidate({ bookId, mode, by }) {
     const p = prevRows.get(it.id);
     row.changed = !!p && (p.hash !== row.hash || p.included !== row.included);
     row.isNew = !p && !!prev;
-    if (p?.snapshotId && row.snapshotId) {
-      const sa = store.getSnapshot(p.snapshotId), sb = store.getSnapshot(row.snapshotId);
-      if (sa?.data?.cells && sb?.data?.cells) {
-        const keys = new Set([...Object.keys(sa.data.cells), ...Object.keys(sb.data.cells)]);
-        const examples = []; let cellsChanged = 0;
-        for (const k of keys) {
-          const a = sa.data.cells[k], b = sb.data.cells[k];
-          if (JSON.stringify(a) === JSON.stringify(b)) continue;
-          cellsChanged++;
-          if (examples.length < 12) {
-            const [r, c] = k.split(',').map(Number);
-            examples.push({
-              cell: colName(c) + (r + 1),
-              from: a ? (a.f ? '=' + a.f : a.v ?? '') : '',
-              to: b ? (b.f ? '=' + b.f : b.v ?? '') : '',
-            });
-          }
-        }
-        row.cellsChanged = cellsChanged;
-        row.examples = examples;
-      }
-    }
     rows.push(row);
   }
 

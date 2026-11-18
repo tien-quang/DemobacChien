@@ -1,10 +1,40 @@
 import React, { useState, useEffect } from 'react';
 import { api } from './api.js';
-import { fmt, useLive, Modal } from './util.jsx';
+import { fmt, useLive, Modal, ChangeList } from './util.jsx';
 
 const MODE = { submitted: 'Bài đã nộp và đã duyệt', approved: 'Chỉ bài đã duyệt', latest: 'Gồm cả bản nháp' };
 const size = (b) => (b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
 const SRC = { submitted: 'bản đã nộp', approved: 'bản đã duyệt', admin: 'bản của admin', draft: 'bản nháp' };
+
+// Nội dung cửa sổ "Chi tiết": từng workbook nhỏ có vào file hay không, và NHỮNG Ô user đã đổi so với lúc giao (ví dụ D5: 100 → 200)
+function DetailBody({ bookId, c }) {
+  const [ch, setCh] = useState(null);
+  const [err, setErr] = useState('');
+  useEffect(() => { api.get(`/books/${bookId}/consolidations/${c.id}/changes`).then((r) => setCh(r.items)).catch((e) => setErr(e.message)); }, [bookId, c.id]);
+  return (
+    <>
+      {err && <p className="err">{err}</p>}
+      <table className="list">
+        <thead><tr><th>Workbook nhỏ</th><th>Người làm</th><th>Trong file?</th><th>Nguồn / ghi chú</th></tr></thead>
+        <tbody>
+          {c.items.map((r, i) => (
+            <React.Fragment key={i}>
+              <tr>
+                <td>{r.name}{r.changed && <span className="tag in_progress"> đổi</span>}</td>
+                <td>{r.assignee || (r.type === 'excel' ? 'Admin' : '—')}</td>
+                <td>{r.included ? <b className="ok-text">Có</b> : <b className="late">Không</b>}</td>
+                <td className="small">{r.note || SRC[r.source] || ''}</td>
+              </tr>
+              {r.included && r.assignee && (
+                <tr><td colSpan={4} style={{ paddingTop: 0 }}>{ch ? <ChangeList ch={ch[r.itemId]} /> : <span className="small muted">Đang so sánh các ô…</span>}</td></tr>
+              )}
+            </React.Fragment>
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
+}
 
 // Tab "Tổng hợp": các phiên bản workbook lớn do máy chủ dựng từ bài đã nộp (bản chụp bất biến, đã xác minh chữ ký)
 export default function Consolidation({ bookId, flash }) {
@@ -32,27 +62,7 @@ export default function Consolidation({ bookId, flash }) {
       await api.download(l.path, l.filename);
     } catch (e) { flash(e.message); }
   };
-  const detail = (c) => setModal({
-    title: `Chi tiết bản v${c.n}`,
-    body: (
-      <table className="list">
-        <thead><tr><th>Workbook nhỏ</th><th>Người làm</th><th>Trong file?</th><th>Ô thay đổi</th><th>Nguồn / ghi chú</th></tr></thead>
-        <tbody>
-          {c.items.map((r, i) => (
-            <tr key={i}>
-              <td>{r.name}{r.changed && <span className="tag in_progress"> đổi</span>}</td>
-              <td>{r.assignee || (r.type === 'excel' ? 'Admin' : '—')}</td>
-              <td>{r.included ? <b className="ok-text">Có</b> : <b className="late">Không</b>}</td>
-              <td className="small">
-                {r.cellsChanged ? <><b>{r.cellsChanged} ô</b>{r.examples?.map((e, j) => <div key={j}><code>{e.cell}</code>: {String(e.from) || '(trống)'} → <b>{String(e.to) || '(trống)'}</b></div>)}</> : '—'}
-              </td>
-              <td className="small">{r.note || SRC[r.source] || ''}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    ),
-  });
+  const detail = (c) => setModal({ title: `Chi tiết bản v${c.n}`, wide: true, body: <DetailBody bookId={bookId} c={c} /> });
   const compare = async (c, prev) => {
     try {
       const d = await api.get(`/books/${bookId}/consolidations/diff?a=${prev.id}&b=${c.id}`);
@@ -111,7 +121,7 @@ export default function Consolidation({ bookId, flash }) {
       <p className="muted small" style={{ marginTop: 10 }}>
         Tải xuống dùng liên kết ký sẵn, hết hạn sau 5 phút và gắn với phiên của bạn. Mỗi lần tải đều được ghi vào nhật ký.
       </p>
-      {modal && <Modal title={modal.title} onClose={() => setModal(null)}>{modal.body}</Modal>}
+      {modal && <Modal title={modal.title} wide={modal.wide} onClose={() => setModal(null)}>{modal.body}</Modal>}
     </div>
   );
 }

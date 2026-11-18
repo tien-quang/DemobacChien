@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { api } from './api.js';
 import { live } from './live.js';
 import { diffGrid, applyPatch } from './diff.js';
-import { go, fmt, useLive, useToast, ConnDot, Modal, STATUS, deadlineText } from './util.jsx';
+import { go, fmt, useLive, useToast, ConnDot, Modal, STATUS, deadlineText, ChangeList } from './util.jsx';
 import Spreadsheet from './Spreadsheet.jsx';
 import WordPane, { SheetPane } from './OnlyOfficeEditor.jsx';
 import Consolidation from './Consolidation.jsx';
@@ -13,10 +13,51 @@ const toLocalInput = (iso) => {
   return d.toISOString().slice(0, 16);
 };
 
+/* ================= Cấp quyền XEM bảng tổng hợp ================= */
+// Bảng tổng hợp (ví dụ tổng gạo của sheet 1 + sheet 2) lấy số liệu từ các sheet do user khác làm. Admin chọn user nào được xem nó (chỉ xem,
+// không sửa, không thấy công thức và không thấy các sheet nguồn); số liệu tự cập nhật ngay khi các bài được giao thay đổi.
+function ViewersPanel({ it, users, onDone, flash }) {
+  const [info, setInfo] = useState(null);
+  const [sel, setSel] = useState(new Set());
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api.get(`/items/${it.id}/viewers`).then((r) => { setInfo(r); setSel(new Set(r.viewerIds)); }).catch((e) => flash(e.message)); }, [it.id]); // eslint-disable-line
+  if (!info) return <p className="muted">Đang tải…</p>;
+  const relatedUsers = new Set(info.related.map((r) => r.userId).filter(Boolean));
+  const toggle = (id) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const pickRelated = () => setSel((s) => new Set([...s, ...[...relatedUsers].filter((u) => u !== info.assigneeId)]));
+  const save = async () => {
+    setBusy(true);
+    try { await api.put(`/items/${it.id}/viewers`, { userIds: [...sel] }); flash('Đã cập nhật quyền xem bảng tổng hợp.'); onDone(); }
+    catch (e) { flash(e.message); } finally { setBusy(false); }
+  };
+  return (
+    <>
+      <p className="small muted" style={{ marginTop: 0 }}>
+        Người được chọn có thể xem sheet này ở chế độ <b>chỉ xem</b> và theo dõi thay đổi theo thời gian thực: số liệu tự cập nhật khi các bài được giao thay đổi.
+        Họ chỉ thấy <b>giá trị</b>, không thấy công thức hay nội dung các sheet nguồn.
+      </p>
+      {info.related.length > 0 && (
+        <div className="viewer-hint small">
+          Bảng này lấy số liệu từ: {info.related.map((r) => `${r.itemName} (${r.userName || 'chưa giao'})`).join(', ')}.
+          {relatedUsers.size > 0 && <> <button onClick={pickRelated}>Chọn những người làm các sheet này</button></>}
+        </div>
+      )}
+      {users.map((u) => (
+        <label className="viewer-row" key={u.id}>
+          <input type="checkbox" checked={sel.has(u.id)} disabled={u.id === info.assigneeId} onChange={() => toggle(u.id)} />
+          {u.name}
+          {relatedUsers.has(u.id) && <span className="tag assigned">làm sheet nguồn</span>}
+          {u.id === info.assigneeId && <span className="muted small">(người làm bảng này)</span>}
+        </label>
+      ))}
+      <div className="row" style={{ marginTop: 12 }}><span className="grow" /><button className="primary" disabled={busy} onClick={save}>Lưu quyền xem</button></div>
+    </>
+  );
+}
+
 /* ================= Tổng quan + phân quyền ================= */
 function Overview({ book, online, users, onOpen, reload, flash }) {
   const [draft, setDraft] = useState({});
-  const [viewerDraft, setViewerDraft] = useState({});
   const [dl, setDl] = useState({});
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState(null);
@@ -24,7 +65,6 @@ function Overview({ book, online, users, onOpen, reload, flash }) {
 
   useEffect(() => {
     setDraft(Object.fromEntries(book.items.map((i) => [i.id, i.assigneeId || ''])));
-    setViewerDraft(Object.fromEntries(book.items.map((i) => [i.id, i.viewerIds || []])));
     setDl(Object.fromEntries(book.items.map((i) => [i.id, toLocalInput(i.deadline)])));
   }, [book.items.map((i) => i.id + i.assigneeId + i.deadline).join()]); // eslint-disable-line
 
@@ -75,39 +115,12 @@ function Overview({ book, online, users, onOpen, reload, flash }) {
       ) : <p className="muted">Chưa có sự kiện nào.</p>,
     });
   });
+  const viewers = (it) => setModal({ title: `Gán quyền xem: ${it.name}`, body: <ViewersPanel it={it} users={users} flash={flash} onDone={() => { setModal(null); reload(); }} /> });
+  const showChanges = guard(async (it) => {
+    const r = await api.get(`/items/${it.id}/changes`);
+    setModal({ title: `Ô đã đổi: ${it.name} (${it.assigneeName})`, wide: true, body: <ChangeList ch={r} max={200} /> });
+  });
   const exportItem = guard((it) => api.download(`/items/${it.id}/export`, `${it.name}.${it.type === 'excel' ? 'xlsx' : 'docx'}`));
-  const editViewers = (it) => {
-    setModal({
-      title: `Gán quyền xem: ${it.name}`,
-      body: (
-        <>
-          <p className="muted small">Người được chọn có thể xem sheet này ở chế độ chỉ xem và theo dõi thay đổi công thức theo thời gian thực.</p>
-          {users.map((u) => (
-            <label className="protect-toggle" key={u.id} style={{ display: 'block', margin: '8px 0' }}>
-              <input type="checkbox" checked={(viewerDraft[it.id] || []).includes(u.id)}
-                onChange={(e) => setViewerDraft((cur) => ({
-                  ...cur,
-                  [it.id]: e.target.checked
-                    ? [...(cur[it.id] || []), u.id]
-                    : (cur[it.id] || []).filter((id) => id !== u.id),
-                }))} />
-              {' '}{u.name}
-            </label>
-          ))}
-          <div className="row" style={{ marginTop: 12 }}>
-            <button className="primary" onClick={guard(async () => {
-              await api.put(`/books/${book.id}/viewers`, {
-                viewers: Object.fromEntries(book.items.map((x) => [x.id, viewerDraft[x.id] || []]))
-              });
-              setModal(null);
-              flash('Đã lưu quyền xem sheet.');
-              reload();
-            })}>Lưu quyền xem</button>
-          </div>
-        </>
-      ),
-    });
-  };
 
   const count = (s) => book.items.filter((i) => i.status === s).length;
   return (
@@ -146,6 +159,7 @@ function Overview({ book, online, users, onOpen, reload, flash }) {
                   <span className={'mini ' + it.type}>{it.type === 'excel' ? 'X' : 'W'}</span> {it.name}
                 </a>
                 {online.has(it.id) && <span className="live-chip"> <i className="pulse" /> đang làm</span>}
+                {it.viewerNames?.length ? <div className="muted small">Được xem: {it.viewerNames.join(', ')}</div> : null}
               </td>
               <td>
                 <select value={draft[it.id] ?? ''} onChange={(e) => setDraft({ ...draft, [it.id]: e.target.value })}>
@@ -163,7 +177,8 @@ function Overview({ book, online, users, onOpen, reload, flash }) {
               <td className="actions">
                 <button onClick={() => onOpen(it.id)}>Xem</button>
                 <button className="primary" onClick={() => onOpen(it.id)}>Sửa</button>
-                {it.type === 'excel' && <button onClick={() => editViewers(it)}>Gán xem{(it.viewerIds || []).length ? ` (${it.viewerIds.length})` : ''}</button>}
+                {it.type === 'excel' && <button onClick={() => viewers(it)} title="Cho user xem bảng này (chỉ xem), ví dụ bảng tổng hợp">Gán xem{it.viewerIds?.length ? ` (${it.viewerIds.length})` : ''}</button>}
+                {it.assigneeId && <button onClick={() => showChanges(it)} title="Những ô user đã đổi so với lúc giao">Ô đã đổi</button>}
                 {['submitted', 'approved'].includes(it.status) && <button onClick={() => verify(it)}>Xác minh</button>}
                 {it.status === 'submitted' && <button className="primary" onClick={() => approve(it)}>Duyệt</button>}
                 {['submitted', 'approved'].includes(it.status) && <button onClick={() => giveBack(it)}>Trả lại</button>}
@@ -177,9 +192,9 @@ function Overview({ book, online, users, onOpen, reload, flash }) {
       </table>
       <p className="muted small" style={{ marginTop: 10 }}>
         Người được giao chỉ nhìn thấy đúng workbook nhỏ của mình, hoàn toàn tách biệt: không có workbook lớn, sheet hay workbook nào khác.
-        Nhấn "Xem" để theo dõi trực tiếp từng ô họ đang gõ. Khi họ nộp, bạn duyệt hoặc trả lại kèm lý do; bài đã nộp nằm sẵn trong workbook lớn này và được tổng hợp ở tab "Tổng hợp".
+        Nhấn "Xem" để theo dõi trực tiếp từng ô họ đang gõ. Với bảng tổng hợp, bấm "Gán xem" để cho user theo dõi số liệu tổng (chỉ xem). Khi họ nộp, bạn duyệt hoặc trả lại kèm lý do; bài đã nộp nằm sẵn trong workbook lớn này và được tổng hợp ở tab "Tổng hợp".
       </p>
-      {modal && <Modal title={modal.title} onClose={() => setModal(null)}>{modal.body}</Modal>}
+      {modal && <Modal title={modal.title} wide={modal.wide} onClose={() => setModal(null)}>{modal.body}</Modal>}
     </div>
   );
 }

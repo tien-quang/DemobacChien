@@ -90,12 +90,14 @@ export function HomeUser() {
           <div className="grow">
             <a className="doctitle" href={'#/item/' + i.id}>{i.name}</a>
             <div className="muted small">
-              <span className={'tag ' + i.status}>{{ assigned: 'Mới giao', in_progress: 'Đang làm', submitted: 'Đã nộp, chờ duyệt', approved: 'Đã duyệt' }[i.status]}</span>
+              {i.viewOnly
+                ? <span className="tag approved">Bảng tổng hợp · chỉ xem · tự cập nhật</span>
+                : <span className={'tag ' + i.status}>{{ assigned: 'Mới giao', in_progress: 'Đang làm', submitted: 'Đã nộp, chờ duyệt', approved: 'Đã duyệt' }[i.status]}</span>}
               {i.returnNote && <span className="late"> · Bị trả lại: {i.returnNote}</span>}
               {i.deadline && <span className={i.pastDue ? 'late' : ''}> · {deadlineText(i.deadline)}</span>}
             </div>
           </div>
-          <button className="primary" onClick={() => go('#/item/' + i.id)}>{['submitted', 'approved'].includes(i.status) ? 'Xem' : 'Làm bài'}</button>
+          <button className="primary" onClick={() => go('#/item/' + i.id)}>{i.viewOnly ? 'Xem tổng hợp' : ['submitted', 'approved'].includes(i.status) ? 'Xem' : 'Làm bài'}</button>
         </div>
       ))}
     </div>

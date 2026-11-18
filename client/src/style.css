@@ -44,6 +44,13 @@ input, select { padding: 5px 8px; border: 1px solid #c8c6c4; border-radius: 3px;
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 20px; }
 .login .card { width: 360px; display: grid; gap: 10px; }
 .login h1 { margin: 0; }
+.policy-card { width: 680px !important; max-width: 100%; }
+.policy-card h2 { font-size: 1rem; margin: 16px 0 6px; }
+.policy-card ul { margin: 0; padding-left: 22px; }
+.policy-card li { margin: 6px 0; }
+.policy-scroll { max-height: 48vh; overflow-y: auto; border: 1px solid var(--line); padding: 4px 16px; background: #fafafa; }
+.policy-check { display: flex; gap: 8px; align-items: flex-start; font-size: .92rem; }
+.policy-check input { margin-top: 3px; }
 .topbar {
   display: flex; align-items: center; gap: 16px; padding: 8px 20px; background: #fff; border-bottom: 1px solid var(--line);
 }
@@ -234,6 +241,11 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; word-bre
 .overview input[type=datetime-local] { padding: 3px 6px; font-size: 12.5px; }
 .overview select { max-width: 180px; }
 .tag.light { background: rgba(255,255,255,.22); color: #fff; }
+.changes { background: #faf9f8; border: 1px solid #edebe9; border-radius: 4px; padding: 6px 8px; margin: 2px 0 4px; max-height: 280px; overflow: auto; }
+.changes-tbl { margin: 4px 0; }
+.changes-tbl td, .changes-tbl th { padding: 2px 8px; }
+.viewer-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.viewer-hint { background: #fff4ce; border-radius: 4px; padding: 6px 8px; margin: 8px 0; }
 .modal-back { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 60; display: grid; place-items: center; padding: 16px; }
 .modal { background: #fff; border-radius: 6px; padding: 18px; width: 560px; max-width: 100%; max-height: 80vh; overflow: auto; }
 .tabsbar .stab { max-width: 240px; }

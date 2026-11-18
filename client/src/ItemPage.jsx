@@ -15,16 +15,18 @@ export default function ItemPage({ me, id }) {
   const [toast, flash] = useToast();
   const sent = useRef(null);
   const cur = useRef(null), curTimer = useRef(null);
+  const dataRef = useRef(null), fxTimer = useRef(null);
+  const [cellFx, setCellFx] = useState(null); // ô vừa đổi trên bảng tổng hợp (nháy sáng)
 
   const load = async () => {
     const r = await api.get('/items/' + id);
-    setItem(r.item); setData(r.data); sent.current = r.data;
+    setItem(r.item); setData(r.data); sent.current = r.data; dataRef.current = r.data;
   };
   useEffect(() => {
     load().catch((e) => setError(e.message));
     live.connect();
     const off = live.sub({ t: 'open', item: id }, { t: 'leave', item: id });
-    return () => { off(); clearTimeout(curTimer.current); };
+    return () => { off(); clearTimeout(curTimer.current); clearTimeout(fxTimer.current); };
   }, [id]); // eslint-disable-line
 
   useEffect(() => {
@@ -38,6 +40,17 @@ export default function ItemPage({ me, id }) {
     else if (m.t === 'status' && m.revoked && m.item === id) { flash('Bạn không còn quyền với workbook này.'); go('#/'); }
     else if (m.t === 'status' && m.item?.id === id) { setItem((i) => ({ ...i, ...m.item })); if (m.item.editable) flash('Quản trị viên đã mở lại bài, bạn có thể chỉnh sửa.'); }
     else if (m.t === 'protect' && m.item === id) setItem((i) => ({ ...i, protect: m.protect }));
+    else if (m.t === 'summary' && m.item === id) { // bảng tổng hợp (chỉ xem): máy chủ đẩy giá trị mới khi các bài được giao thay đổi
+      const old = dataRef.current?.cells || {}, nu = m.data.cells || {};
+      const changed = new Set();
+      for (const k of new Set([...Object.keys(old), ...Object.keys(nu)])) if (JSON.stringify(old[k]?.v ?? null) !== JSON.stringify(nu[k]?.v ?? null)) changed.add(k);
+      dataRef.current = m.data; sent.current = m.data; setData(m.data);
+      if (changed.size && Object.keys(old).length) {
+        setCellFx(changed); clearTimeout(fxTimer.current);
+        fxTimer.current = setTimeout(() => setCellFx(null), 2500);
+        flash(`Bảng tổng hợp vừa thay đổi (${changed.size} ô).`);
+      }
+    }
   });
 
   const sendEdit = (msg) => live.edit({ item: id, ...msg }).catch((e) => { flash(e.message); load(); });
@@ -68,7 +81,9 @@ export default function ItemPage({ me, id }) {
 
   const wm = `${me.name} · ${me.username} · #${me.tag} · ${new Date().toLocaleDateString('vi-VN')}`;
   const admin = me.role === 'admin';
-  const notice = admin
+  const viewOnly = !!item.viewOnly;
+  const notice = viewOnly ? 'Bảng tổng hợp (chỉ xem): số liệu tự cập nhật khi các bài được giao thay đổi. Ô vừa đổi sẽ nháy sáng.'
+    : admin
     ? (item.status === 'approved' ? 'Đã duyệt: quản trị viên vẫn có thể chỉnh sửa' : item.status === 'submitted' ? 'Đã nộp: quản trị viên vẫn có thể chỉnh sửa' : 'Quản trị viên có thể chỉnh sửa')
     : item.status === 'approved' ? 'Đã được duyệt: chỉ xem' : item.status === 'submitted' ? 'Đã nộp, chờ duyệt: chỉ xem' : item.pastDue ? 'Quá hạn nộp: chỉ xem' : !item.editable ? 'Chỉ xem' : '';
   return (
@@ -76,8 +91,8 @@ export default function ItemPage({ me, id }) {
       <div className={'titlebar ' + item.type}>
         <button className="ghost" onClick={() => go('#/')}>Quay lại</button>
         <span className="doctitle-bar">{item.name}</span>
-        <span className={'tag light ' + item.status}>{STATUS[item.status]}</span>
-        {item.deadline && <span className={'savemsg' + (item.pastDue ? ' late-w' : '')}>{deadlineText(item.deadline)}</span>}
+        {viewOnly ? <span className="tag light approved">Chỉ xem · bảng tổng hợp</span> : <span className={'tag light ' + item.status}>{STATUS[item.status]}</span>}
+        {!viewOnly && item.deadline && <span className={'savemsg' + (item.pastDue ? ' late-w' : '')}>{deadlineText(item.deadline)}</span>}
         <span className="grow" />
         {item.editable && <span className="savemsg">{pending ? 'Đang gửi…' : 'Đã lưu trên máy chủ'}</span>}
         <ConnDot />
@@ -85,7 +100,12 @@ export default function ItemPage({ me, id }) {
       </div>
       {item.returnNote && item.editable && <div className="return-note"><b>Quản trị viên trả lại bài:</b> {item.returnNote}</div>}
       <div className="docbody">
-        {item.type === 'excel' ? (
+        {viewOnly ? (
+          <Spreadsheet
+            key={item.id} sheetName={item.name} data={data} others={{}} editable={false} restricted
+            protect={item.protect} watermark={wm} notice={notice} flash={cellFx} onBlocked={flash} onChange={() => {}}
+          />
+        ) : item.type === 'excel' ? (
           <SheetPane key={item.id} id={item.id} editable={item.editable} notice={notice} rev={item.protect && item.protect.rev}>
             <Spreadsheet
               key={item.id} sheetName={item.name} data={data} others={{}} editable={item.editable} restricted

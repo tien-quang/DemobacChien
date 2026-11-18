@@ -17,8 +17,9 @@ const E = (s, m) => new HttpError(s, m);
 function perm(user, it) {
   const admin = isAdmin(user);
   const own = it.assigneeId === user.id;
-  const viewer = !admin && (it.viewerIds || []).includes(user.id);
   const pastDue = !!(it.deadline && Date.now() > Date.parse(it.deadline));
+  // viewer: được admin cấp quyền CHỈ XEM bảng tổng hợp (không bao giờ sửa được, không thấy công thức và các sheet nguồn)
+  const viewer = !admin && !own && it.type === 'excel' && (it.viewerIds || []).includes(user.id);
   const read = admin || own || viewer;
   const edit = admin || (!FINAL.has(it.status) && !pastDue && own);
   return { admin, own, viewer, read, edit, pastDue };
@@ -53,18 +54,36 @@ function formulaUsesHidden(formula, hidden) {
   for (const m of refs) if (hidden.has(`${Number(m[2]) - 1},${colIndex(m[1])}`)) return true;
   return false;
 }
+// Dữ liệu cho người chỉ được XEM bảng tổng hợp: máy chủ tự tính công thức (lấy số liệu mới nhất của các sheet nguồn, kể cả bài đang làm dở)
+// rồi chỉ gửi GIÁ TRỊ. Công thức, tên và nội dung các sheet nguồn không bao giờ rời khỏi máy chủ.
+function viewerData(it) {
+  const book = store.books.get(it.bookId);
+  const others = {};
+  for (const o of store.bookItems(book)) if (o.type === 'excel' && o.id !== it.id) others[o.name] = o.data.cells;
+  const hid = hiddenKeys(it);
+  const hidden = new Set(hid);
+  const cells = {};
+  for (const [k, c] of Object.entries(materialize(it.data, it.name, others).cells)) {
+    const { f, ...rest } = c;
+    if (hidden.has(k) || (f && formulaUsesHidden(f, hidden))) { if (c.s) cells[k] = { s: c.s }; continue; } // ô ẩn, hoặc ô tính từ ô ẩn: không hiện số
+    cells[k] = rest;
+  }
+  return { ...it.data, cells };
+}
+
+// Những sheet nguồn mà công thức của bảng tổng hợp này lấy số liệu (và ai đang làm sheet đó): gợi ý cấp quyền xem cho đúng người
+function relatedSources(it) {
+  const book = store.books.get(it.bookId);
+  const text = Object.values(it.data.cells).filter((c) => c.f).map((c) => c.f.toLowerCase()).join('\n');
+  if (!text) return [];
+  return store.bookItems(book).filter((o) => o.id !== it.id && o.type === 'excel' && (text.includes(`'${o.name.toLowerCase()}'!`) || text.includes(`${o.name.toLowerCase()}!`)))
+    .map((o) => ({ itemId: o.id, itemName: o.name, userId: o.assigneeId || null, userName: o.assigneeId ? store.user(o.assigneeId)?.name || null : null }));
+}
+
 // Dữ liệu ô mà người này được thấy: ô ẩn bị gỡ nội dung (giữ định dạng) với mọi người không phải admin
 function dataFor(user, it) {
   if (isAdmin(user) || it.type !== 'excel') return it.data;
-  if (perm(user, it).viewer) {
-    const book = store.books.get(it.bookId);
-    if (book) {
-      const others = Object.fromEntries(store.bookItems(book)
-        .filter((x) => x.type === 'excel')
-        .map((x) => [x.name, x.data.cells]));
-      return materialize(it.data, it.name, others);
-    }
-  }
+  if (perm(user, it).viewer) return viewerData(it);
   const hid = hiddenKeys(it);
   if (!hid.length) return it.data;
   const cells = { ...it.data.cells };
@@ -82,7 +101,7 @@ function dataFor(user, it) {
 function userView(it, user) {
   const p = perm(user, it);
   return {
-    id: it.id, name: it.name, type: it.type, status: it.status, editable: p.edit, pastDue: p.pastDue,
+    id: it.id, name: it.name, type: it.type, status: it.status, editable: p.edit, pastDue: p.pastDue, viewOnly: p.viewer,
     deadline: it.deadline, submittedAt: it.submittedAt, approvedAt: it.approvedAt, returnNote: it.returnNote, version: it.version,
     protect: protectView(it),
   }; // KHÔNG có bookId, tên workbook lớn hay thông tin workbook khác
@@ -93,8 +112,8 @@ function adminView(it) {
     id: it.id, bookId: it.bookId, name: it.name, type: it.type, status: it.status, editable: true,
     assigneeId: it.assigneeId, assigneeName: a ? a.name : null,
     submittedAt: it.submittedAt, approvedAt: it.approvedAt, returnNote: it.returnNote, submitHash: it.submitHash, updatedAt: it.updatedAt, version: it.version,
+    viewerIds: it.viewerIds || [], viewerNames: (it.viewerIds || []).map((id) => store.user(id)?.name).filter(Boolean),
     deadline: it.deadline, protectOn: it.protect.on, protectCount: Object.keys(it.protect.cells).length, hiddenCount: hiddenKeys(it).length,
-    viewerIds: it.viewerIds || [],
     pastDue: !!(it.deadline && Date.now() > Date.parse(it.deadline)),
   };
 }
@@ -246,6 +265,9 @@ function assign(user, bookId, assignments, deadlines, ip) {
     if (it.assigneeId === uid) continue;
     const prev = it.assigneeId;
     it.assigneeId = uid;
+    // Mốc so sánh: bản chụp bất biến của bảng ngay lúc giao. Khi user nộp, admin so với mốc này để biết user đã đổi những ô nào.
+    it.baseSnapshotId = uid ? store.createSnapshot(it, 'assign', user.id, store.sha(store.canon(it.data)), null) : null;
+    if (uid) it.viewerIds = (it.viewerIds || []).filter((x) => x !== uid); // đã là người làm bài thì không còn là "người chỉ xem"
     if (uid && it.protect.on) {
       it.protect.on = false;
       it.protect.rev = (it.protect.rev || 0) + 1;
@@ -298,40 +320,28 @@ function setProtect(user, id, body, ip) {
   return protectView(it, true);
 }
 
-// Quản trị viên gán quyền xem chỉ đọc cho một workbook nhỏ (thường là sheet tổng hợp).
-function setViewers(user, bookId, viewers, ip) {
-  const book = store.books.get(bookId);
-  if (!isAdmin(user) || !book) throw E(404, 'Không tìm thấy');
-  const next = new Map();
-  for (const [iid, ids] of Object.entries(viewers || {})) {
-    if (!book.itemIds.includes(iid)) throw E(400, 'Workbook nhỏ không tồn tại');
-    if (!Array.isArray(ids) || ids.length > 1000) throw E(400, 'Danh sách người xem không hợp lệ');
-    const valid = ids.filter((uid) => typeof uid === 'string' && store.user(uid)?.role === 'user');
-    if (valid.length !== ids.length) throw E(400, 'Người xem không hợp lệ');
-    next.set(iid, [...new Set(valid)]);
-  }
-  let changed = 0;
-  for (const iid of book.itemIds) {
-    const it = store.items.get(iid);
-    if (!it) continue;
-    const ids = next.has(iid) ? next.get(iid) : [];
-    const old = [...(it.viewerIds || [])].sort().join(',');
-    const neu = [...ids].sort().join(',');
-    if (old === neu) continue;
-    it.viewerIds = ids;
-    store.saveItem(it, true);
-    store.audit(user.id, 'viewers', iid, ip, { viewers: ids });
-    changed++;
-  }
-  store.flushItems();
-  for (const iid of book.itemIds) {
-    const it = store.items.get(iid);
-    bus.emit('status', { item: it, prevAssigneeId: it.assigneeId });
-  }
-  return changed;
+// ---------- cấp quyền XEM bảng tổng hợp cho user (chỉ admin) ----------
+function setViewers(user, id, userIds, ip) {
+  const it = store.items.get(id);
+  if (!isAdmin(user) || !it || it.type !== 'excel') throw E(404, 'Không tìm thấy');
+  if (!Array.isArray(userIds) || userIds.length > 200 || !userIds.every((x) => typeof x === 'string')) throw E(400, 'Danh sách người dùng không hợp lệ');
+  const next = [...new Set(userIds)].filter((uid) => uid !== it.assigneeId);
+  if (!next.every((uid) => store.user(uid) && store.user(uid).role === 'user')) throw E(400, 'Người dùng không hợp lệ');
+  const prev = it.viewerIds || [];
+  const added = next.filter((x) => !prev.includes(x)), removed = prev.filter((x) => !next.includes(x));
+  if (!added.length && !removed.length) return { viewerIds: prev, added, removed };
+  it.viewerIds = next;
+  const at = new Date().toISOString();
+  added.forEach((uid) => it.history.push({ at, action: 'view_grant:' + uid, by: user.id }));
+  removed.forEach((uid) => it.history.push({ at, action: 'view_revoke:' + uid, by: user.id }));
+  store.saveItem(it, true);
+  store.audit(user.id, 'viewers', it.id, ip, { added, removed });
+  bus.emit('viewers', { item: it, added, removed });
+  return { viewerIds: next, added, removed };
 }
 
 module.exports = {
+  setViewers, relatedSources, viewerData,
   bus, HttpError, E, perm, isAdmin, getReadable, userView, adminView, protectView, hiddenKeys, dataFor,
-  applyEdit, markOpened, submit, approve, reopen, verify, FINAL, assign, setProtect, setViewers, emitStatus,
+  applyEdit, markOpened, submit, approve, reopen, verify, FINAL, assign, setProtect, emitStatus,
 };

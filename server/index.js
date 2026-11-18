@@ -17,6 +17,7 @@ const { colName } = require('./refs');
 const { materialize } = require('./formula');
 const { safeHtmlForDocx } = require('./docsafe');
 const oo = require('./onlyoffice');
+const { consolidationChanges, itemChanges } = require('./changes');
 
 const PORT = process.env.PORT || 4000;
 const app = express();
@@ -261,11 +262,6 @@ app.put('/api/books/:id/assign', adminOnly, (req, res) => {
   core.bus.emit('book', { bookId: b.id });
   res.json({ changed: n, items: store.bookItems(b).map(core.adminView) });
 });
-app.put('/api/books/:id/viewers', adminOnly, (req, res) => {
-  const n = core.setViewers(req.user, req.params.id, req.body?.viewers || {}, ipOf(req));
-  core.bus.emit('book', { bookId: req.params.id });
-  res.json({ changed: n, items: store.bookItems(getBook(req.params.id)).map(core.adminView) });
-});
 // Xuất workbook lớn thành 1 file .xlsx gom tất cả sheet (chỉ admin)
 app.get('/api/books/:id/export', adminOnly, async (req, res) => {
   const b = getBook(req.params.id);
@@ -285,10 +281,7 @@ const consView = (c) => ({
   id: c.id, n: c.n, at: c.at, by: c.by ? store.user(c.by)?.name || c.by : 'Tự động', mode: c.mode, sha: c.sha, size: c.size,
   docx: c.manifest.docx ? { size: c.manifest.docx.size, count: c.manifest.docx.count } : null,
   total: c.manifest.items.length, included: c.manifest.items.filter((r) => r.included).length, changed: c.manifest.changed, sheets: c.manifest.sheets,
-  items: c.manifest.items.map((r) => ({
-    name: r.name, type: r.type, assignee: r.assignee, status: r.status, included: r.included, source: r.source,
-    note: r.note, changed: !!(r.changed || r.isNew), cellsChanged: r.cellsChanged || 0, examples: r.examples || [],
-  })),
+  items: c.manifest.items.map((r) => ({ itemId: r.itemId, name: r.name, type: r.type, assignee: r.assignee, status: r.status, included: r.included, source: r.source, note: r.note, changed: !!(r.changed || r.isNew) })),
 });
 app.get('/api/books/:id/consolidations', adminOnly, (req, res) => {
   const b = getBook(req.params.id);
@@ -331,6 +324,14 @@ app.get('/api/consolidations/:cid/download', adminOnly, (req, res) => {
   res.set({ 'Content-Type': kind === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(c.manifest.title + ' - v' + c.n)}.${kind}` });
   res.send(buf);
 });
+// Chi tiết 1 bản tổng hợp: với từng workbook nhỏ có người làm, liệt kê CÁC Ô user đã đổi so với lúc giao (ví dụ D5: 100 → 200)
+app.get('/api/books/:id/consolidations/:cid/changes', adminOnly, (req, res) => {
+  const b = getBook(req.params.id);
+  const c = store.getConsolidation(req.params.cid);
+  if (!c || c.bookId !== b.id) throw E(404, 'Không tìm thấy phiên bản');
+  A(req, 'view_changes', null, { cons: c.id });
+  res.json({ n: c.n, items: consolidationChanges(c) });
+});
 // So sánh 2 phiên bản tổng hợp: workbook nhỏ nào đổi, đổi bao nhiêu ô, ví dụ vài ô
 app.get('/api/books/:id/consolidations/diff', adminOnly, (req, res) => {
   const b = getBook(req.params.id);
@@ -365,8 +366,8 @@ app.get('/api/books/:id/consolidations/diff', adminOnly, (req, res) => {
 
 // ---------- workbook nhỏ (item) ----------
 app.get('/api/my-items', (req, res) => {
-  const mine = [...store.items.values()].filter((i) => i.assigneeId === req.user.id || (i.viewerIds || []).includes(req.user.id));
-  res.json(mine.map((i) => { const v = core.userView(i, req.user); return { id: v.id, name: v.name, type: v.type, status: v.status, editable: v.editable, deadline: v.deadline, pastDue: v.pastDue, returnNote: v.returnNote }; }));
+  const mine = [...store.items.values()].filter((i) => i.assigneeId === req.user.id || core.perm(req.user, i).viewer); // gồm cả bảng tổng hợp được cấp quyền xem
+  res.json(mine.map((i) => { const v = core.userView(i, req.user); return { id: v.id, name: v.name, type: v.type, status: v.status, editable: v.editable, viewOnly: v.viewOnly, deadline: v.deadline, pastDue: v.pastDue, returnNote: v.returnNote }; }));
 });
 app.get('/api/onlyoffice/status', (req, res) => res.json({ enabled: oo.enabled() }));
 app.get('/api/items/:id/onlyoffice', async (req, res, next) => {
@@ -404,6 +405,18 @@ app.post('/api/items/:id/submit', async (req, res, next) => {
 });
 app.post('/api/items/:id/approve', adminOnly, (req, res) => { core.approve(req.user, req.params.id, ipOf(req)); res.json({ ok: true }); });
 app.post('/api/items/:id/reopen', adminOnly, (req, res) => { core.reopen(req.user, req.params.id, req.body?.reason, ipOf(req)); res.json({ ok: true }); });
+// Cấp / thu hồi quyền XEM bảng tổng hợp cho user. GET trả danh sách đang được xem + gợi ý những người làm các sheet nguồn mà bảng này lấy số liệu.
+app.get('/api/items/:id/viewers', adminOnly, (req, res) => {
+  const it = core.getReadable(req.user, req.params.id, ipOf(req));
+  if (it.type !== 'excel') throw E(400, 'Chỉ cấp quyền xem cho bảng tính');
+  res.json({ viewerIds: it.viewerIds || [], assigneeId: it.assigneeId, related: core.relatedSources(it) });
+});
+app.put('/api/items/:id/viewers', adminOnly, (req, res) => res.json(core.setViewers(req.user, req.params.id, req.body?.userIds, ipOf(req))));
+// Ô user đã đổi so với lúc giao bài (admin)
+app.get('/api/items/:id/changes', adminOnly, (req, res) => {
+  const it = core.getReadable(req.user, req.params.id, ipOf(req));
+  res.json(itemChanges(it, core.FINAL.has(it.status)));
+});
 app.put('/api/items/:id/protect', adminOnly, (req, res) => res.json(core.setProtect(req.user, req.params.id, req.body || {}, ipOf(req))));
 app.get('/api/items/:id/verify', adminOnly, (req, res) => {
   const it = core.getReadable(req.user, req.params.id, ipOf(req));

@@ -94,6 +94,20 @@ và chỉ áp phần ô user đã đổi qua `core.applyEdit` (quyền, hạn n�
 - **Tự lưu định kỳ** mỗi 5 giây (`OO_AUTOSAVE_SECONDS`, đặt 0 để tắt): dữ liệu ở máy chủ, bảng tính theo dõi của admin và bản nộp luôn mới, kể cả khi user tắt trình duyệt đột ngột. Mỗi lần lưu đều đi qua `core.applyEdit` nên nhật ký có nhiều dòng `oo_save` hơn.
 
 
+## Bảng tổng hợp cho user theo dõi + xem ô user đã đổi (v5.1)
+
+**Cấp quyền XEM bảng tổng hợp.** Ví dụ sheet 1 và sheet 2 là nơi user nhập gạo, sheet 3 (admin làm, chưa giao ai) cộng lại bằng công thức.
+Ở tab Tổng quan, hàng của sheet 3 có nút **Gán xem**: chọn user nào được theo dõi (có nút gợi ý "Chọn những người làm các sheet nguồn").
+User được cấp sẽ thấy bảng đó trong danh sách của mình, chế độ **chỉ xem**; mỗi khi sheet 1 hoặc 2 đổi, máy chủ tính lại và đẩy số mới (ô vừa đổi nháy sáng).
+- Chỉ gửi **giá trị**: không có công thức, không thấy tên hay nội dung sheet nguồn; ô bị ẩn (và ô tính từ ô ẩn) hiển thị trống.
+- Người chỉ xem không sửa, không nộp, không mở bằng ONLYOFFICE, không tải file (máy chủ kiểm lại ở mọi đường vào). Admin thu hồi thì user mất quyền ngay.
+- API: `GET/PUT /api/items/:id/viewers`; WebSocket gửi `summary` cho người đang mở bảng.
+
+**Chi tiết ô đã đổi.** Mỗi lần giao bài, máy chủ chụp bản bất biến của bảng làm mốc. Tab **Tổng hợp > Chi tiết** liệt kê, với từng bài đã đưa vào file,
+những ô user đã đổi so với lúc giao (ví dụ `D5: 0 → 10000000`). Nút **Ô đã đổi** ở Tổng quan cho xem nhanh trước khi duyệt.
+Ô công thức mà công thức không đổi (chỉ kết quả tính đổi) không bị tính là user sửa. Bản tổng hợp cũ chưa có mốc thì so với lần tổng hợp liền trước.
+- API: `GET /api/books/:id/consolidations/:cid/changes`, `GET /api/items/:id/changes`. Kiểm thử: mục [13] của `npm test`.
+
 ## Mô hình lưu trữ và bảo mật
 
 Giữ nguyên v4: SQLite, sheet chia khối 200 dòng mã hóa riêng, nhật ký thao tác có phục hồi sau sập máy, mã hóa theo lớp khóa + đổi khóa,
