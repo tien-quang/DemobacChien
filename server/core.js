@@ -269,6 +269,7 @@ function setProtect(user, id, body, ip) {
     if (!Array.isArray(list) || list.length > 60000 || !list.every((k) => typeof k === 'string' && keyOK(k))) throw E(400, 'Danh sách ô không hợp lệ');
     list.forEach((k) => { if (val) cells[k] = 1; else delete cells[k]; });
   }
+  if (Array.isArray(body.deny) && body.deny.length) it.protect.on = true;
   it.protect.cells = cells;
   const hidden = { ...(it.protect.hidden || {}) };
   for (const [list, val] of [[body.hide, true], [body.show, false]]) {
@@ -276,6 +277,7 @@ function setProtect(user, id, body, ip) {
     if (!Array.isArray(list) || list.length > 60000 || !list.every((k) => typeof k === 'string' && keyOK(k))) throw E(400, 'Danh sách ô không hợp lệ');
     list.forEach((k) => { if (val) hidden[k] = 1; else delete hidden[k]; });
   }
+  if (Array.isArray(body.hide) && body.hide.length) it.protect.on = true;
   it.protect.hidden = hidden;
   it.protect.rev = (it.protect.rev || 0) + 1;
   store.saveItem(it, true);

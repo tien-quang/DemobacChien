@@ -87,6 +87,11 @@ function totp(secret, off = 0) {
     const assignedProtect = (await admin.get('/api/items/' + kt.id)).data.item.protect;
     ok(assignedProtect.on === false, 'giao workbook không tự bật bảo vệ ô');
     await admin.put('/api/items/' + kt.id + '/protect', { on: true });
+    const lockResult = await admin.put('/api/items/' + kt.id + '/protect', { deny: ['4,2'] });
+    ok(lockResult.status === 200 && lockResult.data.on && !lockResult.data.cells['4,2'], 'Khóa ô tự bật bảo vệ và loại ô khỏi danh sách được nhập');
+    const hideResult = await admin.put('/api/items/' + kt.id + '/protect', { hide: ['4,3'] });
+    ok(hideResult.status === 200 && hideResult.data.on && hideResult.data.hidden === 1, 'Ẩn ô đồng thời bật bảo vệ và khóa ô đó');
+    await admin.put('/api/items/' + kt.id + '/protect', { show: ['4,3'] });
 
     console.log('\n[3] Cách ly: user chỉ thấy workbook nhỏ của mình');
     const mine = (await u1.get('/api/my-items')).data;

@@ -116,9 +116,21 @@ async function exportXlsx(doc) {
     // Bảo vệ sheet kiểu Excel (ONLYOFFICE chặn sửa ô khóa ngay trên giao diện): mọi ô khóa, trừ các ô trong protect.unlock.
     // Mật khẩu ngẫu nhiên của máy chủ: user không có mật khẩu nên không bỏ bảo vệ được.
     if (p.protect) {
-      for (const k of p.protect.unlock || []) {
-        const [r, c] = k.split(',').map(Number);
-        ws.getCell(r + 1, c + 1).protection = { locked: false };
+      const hidden = new Set(p.protect.hidden || []);
+      if (p.protect.unlockAll) {
+        const rows = Math.max(1, Number(d.rows) || 2000);
+        const cols = Math.max(1, Number(d.cols) || 60);
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            if (!hidden.has(r + ',' + c)) ws.getCell(r + 1, c + 1).protection = { locked: false };
+          }
+        }
+      } else {
+        for (const k of p.protect.unlock || []) {
+          if (hidden.has(k)) continue;
+          const [r, c] = k.split(',').map(Number);
+          ws.getCell(r + 1, c + 1).protection = { locked: false };
+        }
       }
       await ws.protect(p.protect.password, { spinCount: 10000 });
     }

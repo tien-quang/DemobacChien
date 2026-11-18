@@ -210,9 +210,15 @@ async function buildXlsx(it, user) {
   let data = it.data, protect;
   if (!core.isAdmin(user)) {
     data = core.dataFor(user, it);
-    if (it.protect.on) {
-      const hid = it.protect.hidden || {};
-      protect = { unlock: Object.keys(it.protect.cells).filter((k) => !hid[k]), password: store.sign('sheetpw|' + it.id) };
+    const hid = it.protect.hidden || {};
+    const hiddenKeys = Object.keys(hid);
+    if (it.protect.on || hiddenKeys.length) {
+      protect = {
+        unlock: it.protect.on ? Object.keys(it.protect.cells).filter((k) => !hid[k]) : [],
+        unlockAll: !it.protect.on,
+        hidden: hiddenKeys,
+        password: store.sign('sheetpw|' + it.id)
+      };
     }
   }
   return Buffer.from(await exportXlsx({ parts: [{ name: it.name, data, protect }] }));
