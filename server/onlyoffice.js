@@ -20,9 +20,22 @@ const plugin = require('./oo-plugin');
 const { parseXlsx, exportXlsx, cleanCell, keyOK, cleanWidths } = require('./excel');
 
 const trim = (s) => String(s || '').replace(/\/+$/, '');
+const documentServerUrl = (s) => {
+  const v = trim(s);
+  if (!v) return '';
+  try {
+    const u = new URL(v);
+    u.pathname = '';
+    u.search = '';
+    u.hash = '';
+    return u.toString().replace(/\/+$/, '');
+  } catch {
+    return v;
+  }
+};
 const CFG = {
-  url: trim(process.env.ONLYOFFICE_URL),
-  internal: trim(process.env.ONLYOFFICE_INTERNAL_URL) || trim(process.env.ONLYOFFICE_URL),
+  url: documentServerUrl(process.env.ONLYOFFICE_URL),
+  internal: documentServerUrl(process.env.ONLYOFFICE_INTERNAL_URL) || documentServerUrl(process.env.ONLYOFFICE_URL),
   appUrl: trim(process.env.ONLYOFFICE_APP_URL),
   secret: process.env.ONLYOFFICE_JWT_SECRET || '',
 };
