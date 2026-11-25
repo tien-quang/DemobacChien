@@ -30,6 +30,14 @@ Yêu cầu Node.js 22.13 trở lên (dùng SQLite có sẵn của Node).
     npm start         # mở http://localhost:4000
     npm test          # 141 kiểm tra tự động
 
+## Định hướng tích hợp C#
+
+Phạm vi mong muốn là chuyển phần nghiệp vụ workbook sang C#: workbook lớn gồm nhiều sheet nhỏ; giao việc và hạn nộp; chỉnh sửa ô; khóa/ẩn ô; nộp, duyệt hoặc trả lại; và theo dõi các ô thay đổi.
+
+Không xây dựng đăng nhập/đăng ký, xác thực, mật khẩu, hash/chữ ký, mã hóa hay ONLYOFFICE. Mọi thay đổi dữ liệu ô nên đi qua một điểm xử lý nghiệp vụ chung để áp dụng quyền và trạng thái nhất quán.
+
+Repo hiện tại vẫn là ứng dụng Node.js/React; chưa có project C# để tích hợp hoặc chạy. Nội dung này chỉ ghi nhận phạm vi mong muốn, không phải hướng dẫn chạy một bản C#.
+
 Mỗi tab trình duyệt có một session slot riêng (lưu trong `sessionStorage`), vì vậy có thể mở
 admin và user đồng thời trên cùng trình duyệt. Không dùng bản sao tab đang giữ nguyên session slot;
 hãy mở tab mới hoặc cửa sổ ẩn danh khác.
